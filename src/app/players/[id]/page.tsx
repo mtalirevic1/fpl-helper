@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -27,6 +28,7 @@ import {
 } from "@/lib/fpl/rules";
 import { buildProjections } from "@/lib/model/projections";
 import type { XpBreakdown } from "@/lib/model/xp";
+import { pageMetadata } from "@/lib/site";
 
 export const revalidate = 300;
 
@@ -78,6 +80,38 @@ const BREAKDOWN_ROWS: Array<{
     explain: "Yellow and red cards, own goals, missed penalties",
   },
 ];
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const playerId = Number(id);
+  if (!Number.isFinite(playerId)) {
+    return pageMetadata({
+      title: "FPL player projection",
+      description: "Expected points breakdown for a Fantasy Premier League player.",
+      path: `/players/${id}`,
+    });
+  }
+
+  const projections = await buildProjections();
+  const player = projections.byId.get(playerId);
+  if (!player) {
+    return pageMetadata({
+      title: "FPL player projection",
+      description: "Expected points breakdown for a Fantasy Premier League player.",
+      path: `/players/${id}`,
+    });
+  }
+
+  return pageMetadata({
+    title: `${player.name} FPL expected points`,
+    description: `${player.name} (${player.teamShort}, ${money(player.price)}) projected points, underlying rates and fixture-by-fixture FPL outlook.`,
+    path: `/players/${player.id}`,
+  });
+}
 
 export default async function PlayerPage({
   params,

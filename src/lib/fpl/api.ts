@@ -46,7 +46,7 @@ async function get<T>(path: string, revalidate: number): Promise<T> {
       // The API rejects requests that do not look like a browser.
       headers: {
         "User-Agent":
-          "Mozilla/5.0 (compatible; fpl-helper/1.0; +https://github.com/fpl-helper)",
+          "Mozilla/5.0 (compatible; fpl-edge/1.0; +https://github.com/mtalirevic1/fpl-helper)",
         Accept: "application/json",
       },
       // Caching is opt-in from Next 16 onwards, so it is requested explicitly

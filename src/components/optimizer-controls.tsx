@@ -89,14 +89,17 @@ export function OptimizerControls({
   const [budget, setBudget] = useState(settings.budget);
   const [minStart, setMinStart] = useState(settings.minStart);
   const [search, setSearch] = useState("");
-
-  useEffect(() => {
+  // Keep local slider state in sync when the URL/budget adapter changes props.
+  const [budgetBaseline, setBudgetBaseline] = useState(settings.budget);
+  const [minStartBaseline, setMinStartBaseline] = useState(settings.minStart);
+  if (settings.budget !== budgetBaseline) {
+    setBudgetBaseline(settings.budget);
     setBudget(settings.budget);
-  }, [settings.budget]);
-
-  useEffect(() => {
+  }
+  if (settings.minStart !== minStartBaseline) {
+    setMinStartBaseline(settings.minStart);
     setMinStart(settings.minStart);
-  }, [settings.minStart]);
+  }
 
   const byId = useMemo(
     () => new Map(players.map((player) => [player.id, player])),

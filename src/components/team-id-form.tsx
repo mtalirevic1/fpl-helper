@@ -3,7 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useTransition } from "react";
 
-const STORAGE_KEY = "fpl-helper:team-id";
+const STORAGE_KEY = "fpl-edge:team-id";
+const LEGACY_STORAGE_KEY = "fpl-helper:team-id";
 
 /**
  * Takes a public FPL team ID. No login is involved — the ID is the number in the
@@ -20,9 +21,12 @@ export function TeamIdForm({ current }: { current?: number }) {
       window.localStorage.setItem(STORAGE_KEY, String(current));
       return;
     }
-    const saved = window.localStorage.getItem(STORAGE_KEY);
+    const saved =
+      window.localStorage.getItem(STORAGE_KEY) ??
+      window.localStorage.getItem(LEGACY_STORAGE_KEY);
     if (saved && input.current && !input.current.value) {
       input.current.value = saved;
+      window.localStorage.setItem(STORAGE_KEY, saved);
     }
   }, [current]);
 

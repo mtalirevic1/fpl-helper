@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 
 import { DeadlineCountdown } from "@/components/deadline";
 import { FixtureStrip } from "@/components/fixture-strip";
@@ -18,8 +19,17 @@ import {
   type PlayerProjection,
   type PriceTrend,
 } from "@/lib/model/projections";
+import { pageMetadata } from "@/lib/site";
 
 export const revalidate = 300;
+
+export const metadata: Metadata = pageMetadata({
+  title: "FPL expected points & captain picks",
+  description:
+    "Live Fantasy Premier League expected points, captain picks, differentials and price-change watch for the coming gameweek.",
+  path: "/",
+  absoluteTitle: "FPL Edge — FPL expected points & squad optimiser",
+});
 
 const TREND_LABEL: Record<PriceTrend, string> = {
   "very-likely-rise": "Very likely to rise",

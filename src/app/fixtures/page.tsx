@@ -1,10 +1,20 @@
+import type { Metadata } from "next";
+
 import { HorizonPicker } from "@/components/horizon-picker";
 import { Card, cx, DifficultyPill, PageHeader } from "@/components/ui";
 import { percent, ukDateTime } from "@/lib/format";
 import { fixturesByTeam, fixtureView } from "@/lib/fpl/season";
 import { buildProjections } from "@/lib/model/projections";
+import { pageMetadata } from "@/lib/site";
 
 export const revalidate = 300;
+
+export const metadata: Metadata = pageMetadata({
+  title: "FPL fixture difficulty ticker",
+  description:
+    "Premier League fixture runs ranked by difficulty, with model expected goals for and against for every club over the next gameweeks.",
+  path: "/fixtures",
+});
 
 export default async function FixturesPage({
   searchParams,

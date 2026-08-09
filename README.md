@@ -1,13 +1,19 @@
-# FPL Helper
+# FPL Edge
 
-A data-driven assistant for Fantasy Premier League, built on the public FPL API
-and the **2026/27** rules. It projects expected points for every player, builds
-the best squad your budget can buy, and ranks transfers by the points they add
-after any hit.
+A data-driven Fantasy Premier League assistant built on the public FPL API and
+the **2026/27** rules. It projects expected points for every player, builds the
+best squad your budget can buy, and ranks transfers by the points they add after
+any hit.
 
 It works before a ball is kicked — projections start from last season's data and
 this season's prices and fixtures — and shifts onto live results automatically as
 gameweeks are played.
+
+## SEO / deployment
+
+Set `NEXT_PUBLIC_SITE_URL` to your production origin (no trailing slash) so
+canonical URLs, Open Graph tags, `sitemap.xml` and `robots.txt` resolve
+correctly. On Vercel this falls back to the project URL when unset.
 
 ## Getting started
 

@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+
 import {
   BudgetAdapter,
   OptimizerControls,
@@ -21,9 +23,17 @@ import { MODEL } from "@/lib/model/config";
 import { buildProjections } from "@/lib/model/projections";
 import { buildCandidates } from "@/lib/optimizer/candidates";
 import { optimizeSquad } from "@/lib/optimizer/squad";
+import { pageMetadata } from "@/lib/site";
 import { toPlayerRow } from "@/lib/view/rows";
 
 export const revalidate = 300;
+
+export const metadata: Metadata = pageMetadata({
+  title: "FPL squad builder & chip optimiser",
+  description:
+    "Build the best FPL squad for your budget with locks, formations and chip modes for Bench Boost, Triple Captain, Free Hit and Wildcard.",
+  path: "/optimizer",
+});
 
 function parseIds(value: string | undefined): number[] {
   if (!value) return [];

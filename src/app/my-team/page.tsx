@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { SquadPitch } from "@/components/squad-pitch";
@@ -25,9 +26,17 @@ import {
   type OwnedPlayer,
   planTransfers,
 } from "@/lib/optimizer/transfers";
+import { pageMetadata } from "@/lib/site";
 import { toPlayerRow } from "@/lib/view/rows";
 
 export const revalidate = 60;
+
+export const metadata: Metadata = pageMetadata({
+  title: "FPL transfer & chip advice for your team",
+  description:
+    "Enter your FPL team ID for recommended transfers, captain, bench order and chip advice based on live expected points.",
+  path: "/my-team",
+});
 
 export default async function MyTeamPage({
   searchParams,

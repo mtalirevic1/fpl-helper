@@ -23,14 +23,14 @@ export function Nav() {
         <Link href="/" className="flex items-center gap-2">
           <Image
             src="/logo.png"
-            alt=""
+            alt="FPL Edge"
             width={28}
             height={28}
             className="size-7 rounded-md"
             priority
           />
           <span className="text-sm font-semibold tracking-tight">
-            FPL Helper
+            FPL Edge
           </span>
         </Link>
 

@@ -1,11 +1,21 @@
+import type { Metadata } from "next";
+
 import { HorizonPicker } from "@/components/horizon-picker";
 import { PlayersTable } from "@/components/players-table";
 import { PageHeader } from "@/components/ui";
 import { MODEL } from "@/lib/model/config";
 import { buildProjections } from "@/lib/model/projections";
+import { pageMetadata } from "@/lib/site";
 import { toPlayerRow } from "@/lib/view/rows";
 
 export const revalidate = 300;
+
+export const metadata: Metadata = pageMetadata({
+  title: "FPL player projected points & stats",
+  description:
+    "Browse every Fantasy Premier League player with expected points, per-90 rates, clean-sheet odds, defensive contribution and fixture tickers.",
+  path: "/players",
+});
 
 export default async function PlayersPage({
   searchParams,
