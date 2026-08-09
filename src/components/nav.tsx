@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -20,9 +21,14 @@ export function Nav() {
     <header className="sticky top-0 z-40 border-b border-line bg-canvas/85 backdrop-blur">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-6">
         <Link href="/" className="flex items-center gap-2">
-          <span className="grid size-7 place-items-center rounded-md bg-accent text-sm font-black text-brand">
-            F
-          </span>
+          <Image
+            src="/logo.png"
+            alt=""
+            width={28}
+            height={28}
+            className="size-7 rounded-md"
+            priority
+          />
           <span className="text-sm font-semibold tracking-tight">
             FPL Helper
           </span>

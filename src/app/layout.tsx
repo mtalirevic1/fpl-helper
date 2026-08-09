@@ -20,6 +20,10 @@ export const metadata: Metadata = {
   title: `FPL Helper — ${SEASON} data-driven Fantasy Premier League assistant`,
   description:
     "Expected points projections, a squad optimiser and transfer advice for Fantasy Premier League, built on live FPL data and the 2026/27 rules.",
+  icons: {
+    icon: "/logo.png",
+    apple: "/logo.png",
+  },
 };
 
 export default function RootLayout({
