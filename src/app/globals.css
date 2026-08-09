@@ -22,13 +22,16 @@
 
 html {
   color-scheme: dark;
+  background-color: var(--color-canvas);
 }
 
 body {
-  background:
+  background-color: var(--color-canvas);
+  background-image:
     radial-gradient(900px 500px at 12% -10%, rgba(55, 0, 60, 0.55), transparent),
-    radial-gradient(700px 400px at 90% 0%, rgba(4, 245, 255, 0.08), transparent),
-    var(--color-canvas);
+    radial-gradient(700px 400px at 90% 0%, rgba(4, 245, 255, 0.08), transparent);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
   color: var(--color-ink);
   font-family: var(--font-sans);
 }
