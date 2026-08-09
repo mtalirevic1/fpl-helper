@@ -137,10 +137,25 @@ export function PlayersTable({
   teams: Array<{ id: number; name: string; shortName: string }>;
   events: number[];
 }) {
+  // FPL prices are in tenths of a million. The ceiling must come from live data
+  // so premiums above a hardcoded £15.0m cap (e.g. Haaland at £15.5m) stay
+  // selectable when the slider is at its maximum.
+  const priceCeiling = useMemo(() => {
+    const highest = rows.reduce((max, row) => Math.max(max, row.price), 0);
+    return Math.max(150, highest);
+  }, [rows]);
+  const priceFloor = useMemo(() => {
+    if (!rows.length) return 38;
+    return Math.min(38, ...rows.map((row) => row.price));
+  }, [rows]);
+
   const [search, setSearch] = useState("");
   const [position, setPosition] = useState<"all" | PositionId>("all");
   const [team, setTeam] = useState<"all" | number>("all");
-  const [maxPrice, setMaxPrice] = useState(150);
+  // null means "no user override" — track the live ceiling so the default
+  // always includes every player, including the most expensive.
+  const [maxPriceOverride, setMaxPriceOverride] = useState<number | null>(null);
+  const maxPrice = maxPriceOverride ?? priceCeiling;
   const [hideUnavailable, setHideUnavailable] = useState(true);
   const [minStart, setMinStart] = useState(0);
   const [sortKey, setSortKey] = useState<SortKey>("xpHorizon");
@@ -257,11 +272,11 @@ export function PlayersTable({
           </span>
           <input
             type="range"
-            min={38}
-            max={150}
+            min={priceFloor}
+            max={priceCeiling}
             step={1}
-            value={maxPrice}
-            onChange={(event) => setMaxPrice(Number(event.target.value))}
+            value={Math.min(maxPrice, priceCeiling)}
+            onChange={(event) => setMaxPriceOverride(Number(event.target.value))}
             className="w-36 accent-[color:var(--color-accent)]"
           />
         </label>
