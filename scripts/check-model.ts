@@ -300,6 +300,35 @@ async function main() {
     );
   }
 
+  console.log("\nOver-budget locks...");
+  // Take the default squad and lock everyone on a budget below its cost — the
+  // search must raise the budget rather than drop any of the locks.
+  const frozen = solution.squad.map((player) => player.id);
+  const frozenCost = solution.cost;
+  const tightBudget = Math.max(600, frozenCost - 50);
+  if (frozen.length === SQUAD.size && tightBudget < frozenCost) {
+    const tight = optimizeSquad(candidates, {
+      budget: tightBudget,
+      locked: frozen,
+    });
+    console.log(
+      `  locked full £${(frozenCost / 10).toFixed(1)}m squad on ${money(
+        tightBudget,
+      )} → cost ${money(tight.cost)}, budget ${money(tight.budget)}`,
+    );
+    check(
+      "A full locked squad is kept when it blows the budget",
+      frozen.every((id) => tight.squad.some((player) => player.id === id)),
+    );
+    check(
+      "Budget adapts upward to fit a locked overspend",
+      tight.budget >= frozenCost,
+      money(tight.budget),
+    );
+  } else {
+    check("Built a full squad to test over-budget locks", false);
+  }
+
   console.log("\nSelling prices");
   // Purchase price plus half of any profit, rounded down to the nearest £0.1m.
   const sellCases: Array<[number, number, number]> = [

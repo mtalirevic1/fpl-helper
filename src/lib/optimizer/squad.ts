@@ -110,6 +110,10 @@ function buildPool(
   return pool;
 }
 
+function formatMoney(tenths: number) {
+  return `£${(tenths / 10).toFixed(1)}m`;
+}
+
 /** A squad under construction, tracking the constraints incrementally. */
 class Working {
   players: OptimizerPlayer[] = [];
@@ -119,7 +123,7 @@ class Working {
   private ids = new Set<number>();
 
   constructor(
-    readonly budget: number,
+    public budget: number,
     readonly maxPerClub: number,
   ) {}
 
@@ -135,13 +139,17 @@ class Working {
     return this.positionCounts[position];
   }
 
-  canAdd(player: OptimizerPlayer) {
+  /**
+   * Whether a player can join on position/club rules. Budget is optional so
+   * locked picks can always be seeded, with the search budget raised afterward.
+   */
+  canAdd(player: OptimizerPlayer, ignoreBudget = false) {
     return (
       !this.ids.has(player.id) &&
       this.positionCounts[player.position] <
         SQUAD.select[player.position as PositionId] &&
       this.clubCount(player.teamId) < this.maxPerClub &&
-      this.cost + player.price <= this.budget
+      (ignoreBudget || this.cost + player.price <= this.budget)
     );
   }
 
@@ -183,6 +191,72 @@ class Working {
   snapshot() {
     return [...this.players];
   }
+}
+
+/**
+ * Lower bound on the cost of filling the remaining squad slots with the
+ * cheapest unused players in each position. Ignores club conflicts, so the
+ * true minimum may be slightly higher — enough to raise the budget floor.
+ */
+function minFillCost(working: Working, pool: OptimizerPlayer[]): number {
+  let total = 0;
+  for (const position of POSITIONS) {
+    const needed =
+      SQUAD.select[position] - working.positionCount(position);
+    if (needed <= 0) continue;
+    const cheapest = pool
+      .filter(
+        (player) => player.position === position && !working.has(player.id),
+      )
+      .sort((a, b) => a.price - b.price)
+      .slice(0, needed);
+    if (cheapest.length < needed) return Number.POSITIVE_INFINITY;
+    total += cheapest.reduce((sum, player) => sum + player.price, 0);
+  }
+  return total;
+}
+
+/**
+ * Seed locked players even when they blow the stated budget, then raise the
+ * working budget so the rest of the 15 can still be filled around them.
+ */
+function seedLockedPlayers(
+  lockedPlayers: OptimizerPlayer[],
+  pool: OptimizerPlayer[],
+  budget: number,
+  maxPerClub: number,
+  warnings: string[],
+): { cost: number; adaptedBudget: number } {
+  if (lockedPlayers.length === 0) {
+    return { cost: 0, adaptedBudget: budget };
+  }
+
+  const seed = new Working(Number.POSITIVE_INFINITY, maxPerClub);
+  for (const player of lockedPlayers) {
+    if (seed.has(player.id)) continue;
+    if (!seed.canAdd(player, true)) {
+      warnings.push(
+        `Could not keep a locked player (position or club limit) — remove a lock and try again.`,
+      );
+      continue;
+    }
+    seed.add(player);
+  }
+
+  const fill = minFillCost(seed, pool);
+  const adaptedBudget = Number.isFinite(fill)
+    ? Math.max(budget, seed.cost + fill)
+    : Math.max(budget, seed.cost);
+
+  if (adaptedBudget > budget) {
+    warnings.push(
+      `Budget raised from ${formatMoney(budget)} to ${formatMoney(
+        adaptedBudget,
+      )} to fit locked players.`,
+    );
+  }
+
+  return { cost: seed.cost, adaptedBudget };
 }
 
 /**
@@ -446,6 +520,14 @@ export function optimizeSquad(
   }
 
   const lockedPlayers = pool.filter((player) => locked.has(player.id));
+  const { adaptedBudget } = seedLockedPlayers(
+    lockedPlayers,
+    pool,
+    budget,
+    maxPerClub,
+    warnings,
+  );
+
   const byPoints = [...pool].sort((a, b) => b.xp - a.xp);
   const byValue = [...pool].sort((a, b) => b.xp / b.price - a.xp / a.price);
 
@@ -466,9 +548,11 @@ export function optimizeSquad(
     null;
 
   for (const ordering of orderings) {
-    const working = new Working(budget, maxPerClub);
+    const working = new Working(adaptedBudget, maxPerClub);
     for (const player of lockedPlayers) {
-      if (working.canAdd(player)) working.add(player);
+      // Locked picks always seed, even when the user's stated budget is tight —
+      // adaptedBudget was raised to make room for the rest of the squad.
+      if (working.canAdd(player, true)) working.add(player);
     }
     if (!construct(ordering, pool, working)) continue;
     const score = improve(working, pool, locked, constraints);
@@ -486,8 +570,8 @@ export function optimizeSquad(
       ...empty,
       squad: [],
       cost: 0,
-      budget,
-      inTheBank: budget,
+      budget: adaptedBudget,
+      inTheBank: adaptedBudget,
       poolSize: pool.length,
       restarts,
       warnings,
@@ -502,8 +586,10 @@ export function optimizeSquad(
     ...bestXi(best.squad, "xp", constraints),
     squad: best.squad,
     cost: best.cost,
-    budget,
-    inTheBank: budget - best.cost,
+    // Surface the adapted budget so the UI slider and shareable URL can catch up
+    // after over-budget locks or replaces.
+    budget: adaptedBudget,
+    inTheBank: adaptedBudget - best.cost,
     poolSize: pool.length,
     restarts,
     warnings,

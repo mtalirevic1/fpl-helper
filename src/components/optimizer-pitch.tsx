@@ -20,8 +20,8 @@ const POSITION_LABEL = {
 
 /**
  * Pitch for the squad builder. Locking pins a player to the XI or bench;
- * Replace opens a same-position picker and freezes the rest of the squad around
- * the swap.
+ * Replace picks a same-position stand-in, clears locks, and rebuilds within
+ * the current budget when possible.
  */
 export function OptimizerPitch({
   startingXi,
@@ -73,6 +73,7 @@ export function OptimizerPitch({
     nextStarters: number[],
     nextBench: number[],
     nextExcluded: number[] = excluded,
+    nextBudget: number = budget,
   ) => {
     const params = new URLSearchParams(searchParams.toString());
     if (nextLocked.length) params.set("lock", nextLocked.join(","));
@@ -83,6 +84,13 @@ export function OptimizerPitch({
     else params.delete("bench");
     if (nextExcluded.length) params.set("ban", nextExcluded.join(","));
     else params.delete("ban");
+    // Manual lock/unlock replaces a one-off include from Replace.
+    params.delete("include");
+    params.delete("includeRole");
+    if (nextBudget !== budget) params.set("budget", String(nextBudget));
+    else if (!params.has("budget") && nextBudget !== SQUAD.budgetTenths) {
+      params.set("budget", String(nextBudget));
+    }
     startTransition(() => router.push(`/optimizer?${params}`));
   };
 
@@ -189,32 +197,28 @@ export function OptimizerPitch({
   ]);
 
   /**
-   * Freeze every other current squad member in their current role, put the
-   * replacement into the vacated slot, and drop the outgoing player.
+   * Rebuild around the chosen player without locking anyone or ruling the
+   * outgoing player out. Keep the current budget so the search trims elsewhere
+   * when it can; BudgetAdapter only raises it if the pick cannot fit.
    */
   const commitReplace = (incomingId: number) => {
     if (!replacing) return;
-    const outgoingId = replacing.player.id;
-    const role = replacing.role;
-
-    const keepXi = startingXi
-      .filter((player) => player.id !== outgoingId && player.id !== incomingId)
-      .map((player) => player.id);
-    const keepBench = bench
-      .filter((player) => player.id !== outgoingId && player.id !== incomingId)
-      .map((player) => player.id);
-
-    const nextStarters =
-      role === "xi" ? [...keepXi, incomingId] : keepXi;
-    const nextBench =
-      role === "bench" ? [...keepBench, incomingId] : keepBench;
-    const nextLocked = [...new Set([...nextStarters, ...nextBench])];
-    // If the replacement was already in the squad, one slot is now empty and the
-    // optimiser fills it. Clear any ban on the incoming player.
     const nextExcluded = excluded.filter((id) => id !== incomingId);
 
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("lock");
+    params.delete("xi");
+    params.delete("bench");
+    if (nextExcluded.length) params.set("ban", nextExcluded.join(","));
+    else params.delete("ban");
+    // Quiet must-include so the pick sticks without Lock badges or role pins.
+    params.set("include", String(incomingId));
+    params.delete("includeRole");
+    // Stay on the stated budget; the optimiser adapts only if this pick cannot fit.
+    params.set("budget", String(budget));
+
     setReplacing(null);
-    write(nextLocked, nextStarters, nextBench, nextExcluded);
+    startTransition(() => router.push(`/optimizer?${params}`));
   };
 
   return (
@@ -252,9 +256,9 @@ export function OptimizerPitch({
                 </span>
               </h3>
               <p className="mt-1 text-xs text-ink-dim">
-                Everyone else stays locked in their current XI or bench spot.
-                Up to {money(replacing.player.price + Math.max(0, bank))}{" "}
-                available for this slot ({money(Math.max(0, bank))} in the bank).
+                Rebuilds the squad around this pick with no locks. The current
+                budget is kept when possible; it only rises if the player cannot
+                fit. Bank: {money(Math.max(0, bank))}.
               </p>
             </div>
             <button
@@ -285,10 +289,10 @@ export function OptimizerPitch({
                   <button
                     type="button"
                     onClick={() => commitReplace(player.id)}
-                    disabled={pending || (!affordable && !alreadyInSquad)}
+                    disabled={pending}
                     className={cx(
                       "flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm transition-colors hover:bg-surface/80 disabled:cursor-not-allowed disabled:hover:bg-transparent",
-                      !affordable && !alreadyInSquad && "opacity-50",
+                      !affordable && !alreadyInSquad && "opacity-80",
                     )}
                   >
                     <PositionBadge position={player.position} />
@@ -301,8 +305,8 @@ export function OptimizerPitch({
                       {alreadyInSquad && (
                         <span className="text-cyan">In squad</span>
                       )}
-                      {!affordable && (
-                        <span className="text-warn">Over budget</span>
+                      {!affordable && !alreadyInSquad && (
+                        <span className="text-warn">May raise budget</span>
                       )}
                       <span className="font-semibold text-accent">Select</span>
                     </span>

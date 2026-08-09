@@ -1,4 +1,5 @@
 import {
+  BudgetAdapter,
   OptimizerControls,
   type PickerPlayer,
 } from "@/components/optimizer-controls";
@@ -72,6 +73,8 @@ export default async function OptimizerPage({
     xi?: string;
     bench?: string;
     ban?: string;
+    include?: string;
+    includeRole?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -100,6 +103,10 @@ export default async function OptimizerPage({
     ]),
   ];
   const excluded = parseIds(params.ban);
+  // Quiet "must include" from Replace — forces the pick into the 15 without
+  // showing Lock badges or pinning an XI/bench role.
+  const included = parseIds(params.include);
+  const searchLocked = [...new Set([...locked, ...included])];
 
   const [projections, bootstrap] = await Promise.all([
     buildProjections(horizon),
@@ -111,13 +118,16 @@ export default async function OptimizerPage({
 
   const solution = optimizeSquad(candidates, {
     budget,
-    locked,
+    locked: searchLocked,
     lockedStarters,
     lockedBench,
     excluded,
     formation: formation === "auto" ? null : formation,
     chip,
   });
+  // Locks/replaces may force the optimiser to raise the budget; surface that
+  // value in the controls and sync it back into the URL.
+  const effectiveBudget = Math.max(budget, solution.budget);
 
   const targetEvent = projections.horizon.from;
   const availability = chipAvailability(bootstrap, []);
@@ -194,11 +204,13 @@ export default async function OptimizerPage({
         )} Pick a formation, lock players, replace anyone on the pitch, or plan a chip.`}
       />
 
+      <BudgetAdapter requested={budget} adapted={effectiveBudget} />
+
       <OptimizerControls
         players={controlPlayers}
         settings={{
           horizon,
-          budget,
+          budget: effectiveBudget,
           minStart,
           formation,
           chip,
@@ -249,7 +261,11 @@ export default async function OptimizerPage({
             <Stat
               label="Squad cost"
               value={money(solution.cost)}
-              hint={`${money(solution.inTheBank)} left in the bank`}
+              hint={
+                solution.inTheBank < 0
+                  ? `${money(-solution.inTheBank)} over the stated budget`
+                  : `${money(solution.inTheBank)} left in the bank`
+              }
             />
             <Stat
               label="Formation"
@@ -323,7 +339,7 @@ export default async function OptimizerPage({
                 lockedStarters={lockedStarters}
                 lockedBench={lockedBench}
                 players={pickerPlayers}
-                budget={budget}
+                budget={effectiveBudget}
                 squadCost={solution.cost}
                 excluded={excluded}
               />

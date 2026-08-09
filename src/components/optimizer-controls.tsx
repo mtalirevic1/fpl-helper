@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 
 import { money, percent } from "@/lib/format";
 import {
@@ -90,6 +90,14 @@ export function OptimizerControls({
   const [minStart, setMinStart] = useState(settings.minStart);
   const [search, setSearch] = useState("");
 
+  useEffect(() => {
+    setBudget(settings.budget);
+  }, [settings.budget]);
+
+  useEffect(() => {
+    setMinStart(settings.minStart);
+  }, [settings.minStart]);
+
   const byId = useMemo(
     () => new Map(players.map((player) => [player.id, player])),
     [players],
@@ -129,6 +137,9 @@ export function OptimizerControls({
     } else params.delete("bench");
     if (merged.excluded.length) params.set("ban", merged.excluded.join(","));
     else params.delete("ban");
+    // Control changes drop a one-off Replace include so locks stay intentional.
+    params.delete("include");
+    params.delete("includeRole");
     startTransition(() => router.push(`/optimizer?${params}`));
   };
 
@@ -248,17 +259,17 @@ export function OptimizerControls({
           <input
             type="range"
             min={800}
-            max={1050}
+            max={1500}
             step={5}
-            value={budget}
+            value={Math.min(1500, Math.max(800, budget))}
             onChange={(event) => setBudget(Number(event.target.value))}
             onPointerUp={() => apply({ budget })}
             onKeyUp={() => apply({ budget })}
             className="mt-3 w-full accent-[color:var(--color-accent)]"
           />
           <p className="mt-1 text-xs text-ink-dim">
-            £100.0m at the start of the season; raise it to match your squad value
-            plus bank.
+            £100.0m at the start of the season. Over-budget locks and replaces
+            raise this automatically to fit.
           </p>
         </div>
 
@@ -511,4 +522,29 @@ function ChipList({
       </div>
     </div>
   );
+}
+
+/**
+ * When the optimiser raises the budget to fit locked players, write that value
+ * back into the URL so the slider and shared links stay in sync.
+ */
+export function BudgetAdapter({
+  requested,
+  adapted,
+}: {
+  requested: number;
+  adapted: number;
+}) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    if (adapted <= requested) return;
+    const params = new URLSearchParams(searchParams.toString());
+    if (Number(params.get("budget")) === adapted) return;
+    params.set("budget", String(adapted));
+    router.replace(`/optimizer?${params.toString()}`);
+  }, [adapted, requested, router, searchParams]);
+
+  return null;
 }
