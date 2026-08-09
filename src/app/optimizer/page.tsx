@@ -2,10 +2,15 @@ import {
   OptimizerControls,
   type PickerPlayer,
 } from "@/components/optimizer-controls";
-import { SquadPitch } from "@/components/squad-pitch";
+import { OptimizerPitch } from "@/components/optimizer-pitch";
 import { Badge, Card, EmptyState, PageHeader, Stat } from "@/components/ui";
 import { money, points } from "@/lib/format";
-import { POSITION_NAME, type PositionId, SQUAD } from "@/lib/fpl/rules";
+import {
+  POSITION_NAME,
+  type PositionId,
+  parseFormation,
+  SQUAD,
+} from "@/lib/fpl/rules";
 import { MODEL } from "@/lib/model/config";
 import { buildProjections } from "@/lib/model/projections";
 import { buildCandidates } from "@/lib/optimizer/candidates";
@@ -29,7 +34,10 @@ export default async function OptimizerPage({
     horizon?: string;
     budget?: string;
     minStart?: string;
+    formation?: string;
     lock?: string;
+    xi?: string;
+    bench?: string;
     ban?: string;
   }>;
 }) {
@@ -40,7 +48,20 @@ export default async function OptimizerPage({
   );
   const budget = Math.max(600, Number(params.budget) || SQUAD.budgetTenths);
   const minStart = Math.min(0.9, Math.max(0, Number(params.minStart) || 0.25));
-  const locked = parseIds(params.lock);
+  const formationParam = params.formation?.trim() || "auto";
+  const formation =
+    formationParam === "auto" || parseFormation(formationParam)
+      ? formationParam
+      : "auto";
+  const lockedStarters = parseIds(params.xi);
+  const lockedBench = parseIds(params.bench);
+  const locked = [
+    ...new Set([
+      ...parseIds(params.lock),
+      ...lockedStarters,
+      ...lockedBench,
+    ]),
+  ];
   const excluded = parseIds(params.ban);
 
   const projections = await buildProjections(horizon);
@@ -51,7 +72,10 @@ export default async function OptimizerPage({
   const solution = optimizeSquad(candidates, {
     budget,
     locked,
+    lockedStarters,
+    lockedBench,
     excluded,
+    formation: formation === "auto" ? null : formation,
   });
 
   const rowFor = (id: number) => {
@@ -66,16 +90,17 @@ export default async function OptimizerPage({
     .map((player) => rowFor(player.id))
     .filter((row): row is NonNullable<typeof row> => Boolean(row));
 
-  const pickerPlayers: PickerPlayer[] = projections.players
-    .slice(0, 400)
-    .map((player) => ({
-      id: player.id,
-      name: player.name,
-      teamShort: player.teamShort,
-      position: player.position,
-      price: player.price,
-      xpHorizon: player.xpHorizon,
-    }));
+  const pickerPlayers: PickerPlayer[] = projections.players.map((player) => ({
+    id: player.id,
+    name: player.name,
+    teamShort: player.teamShort,
+    teamId: player.teamId,
+    position: player.position,
+    price: player.price,
+    xpHorizon: player.xpHorizon,
+  }));
+
+  const controlPlayers = pickerPlayers.slice(0, 400);
 
   const spendByPosition = ([1, 2, 3, 4] as PositionId[]).map((position) => {
     const inPosition = solution.squad.filter(
@@ -94,12 +119,21 @@ export default async function OptimizerPage({
         title="Squad builder"
         description={`The best 15 the money can buy for GW${projections.horizon.from}–${projections.horizon.to}: maximum projected points inside the ${money(
           budget,
-        )} budget, the ${SQUAD.select[1]}/${SQUAD.select[2]}/${SQUAD.select[3]}/${SQUAD.select[4]} squad split and the ${SQUAD.maxPerClub}-per-club limit.`}
+        )} budget, the ${SQUAD.select[1]}/${SQUAD.select[2]}/${SQUAD.select[3]}/${SQUAD.select[4]} squad split and the ${SQUAD.maxPerClub}-per-club limit. Pick a formation, lock players, or replace anyone on the pitch.`}
       />
 
       <OptimizerControls
-        players={pickerPlayers}
-        settings={{ horizon, budget, minStart, locked, excluded }}
+        players={controlPlayers}
+        settings={{
+          horizon,
+          budget,
+          minStart,
+          formation,
+          locked,
+          lockedStarters,
+          lockedBench,
+          excluded,
+        }}
       />
 
       {solution.warnings.length > 0 && (
@@ -133,7 +167,19 @@ export default async function OptimizerPage({
               value={money(solution.cost)}
               hint={`${money(solution.inTheBank)} left in the bank`}
             />
-            <Stat label="Formation" value={solution.formation} hint="Best legal shape for this squad" />
+            <Stat
+              label="Formation"
+              value={solution.formation}
+              hint={
+                formation === "auto"
+                  ? "Best legal shape for this squad"
+                  : `Fixed to ${formation}${
+                      solution.formation !== formation
+                        ? " (adjusted)"
+                        : ""
+                    }`
+              }
+            />
             <Stat
               label="Bench points"
               value={points(solution.benchXp)}
@@ -144,7 +190,7 @@ export default async function OptimizerPage({
           <div className="mt-4 grid gap-4 lg:grid-cols-3">
             <Card
               title={`Suggested squad for gameweek ${projections.horizon.from}`}
-              subtitle={`Captain armband goes to the highest projection for GW${projections.horizon.from}.`}
+              subtitle={`Captain armband goes to the highest projection for GW${projections.horizon.from}. Lock pins a spot; Replace swaps that player for another in the same position.`}
               className="lg:col-span-2"
               action={
                 <Badge tone="neutral">
@@ -152,12 +198,19 @@ export default async function OptimizerPage({
                 </Badge>
               }
             >
-              <SquadPitch
+              <OptimizerPitch
                 startingXi={startingXi}
                 bench={bench}
                 captainId={solution.captain?.id}
                 viceCaptainId={solution.viceCaptain?.id}
                 event={projections.horizon.from}
+                locked={locked}
+                lockedStarters={lockedStarters}
+                lockedBench={lockedBench}
+                players={pickerPlayers}
+                budget={budget}
+                squadCost={solution.cost}
+                excluded={excluded}
               />
             </Card>
 
@@ -200,8 +253,13 @@ export default async function OptimizerPage({
                   differ.
                 </p>
                 <p className="mt-3 text-sm text-ink-muted">
-                  Set the horizon to 1 to chase the coming gameweek, or 6–8 to
-                  build for a fixture run.
+                  Locking from the pitch pins a player to that role — XI or bench —
+                  while the optimiser rebuilds the rest of the 15 around them.
+                  Replace freezes everyone else and swaps only that slot. A fixed
+                  formation scores every candidate squad as that shape, so the
+                  search builds for 3-5-2 (or whatever you pick) rather than
+                  whatever happens to score highest. Set the horizon to 1 to chase
+                  the coming gameweek, or 6–8 to build for a fixture run.
                 </p>
               </Card>
             </div>

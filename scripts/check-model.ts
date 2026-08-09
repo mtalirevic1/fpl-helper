@@ -186,6 +186,60 @@ async function main() {
     money(constrained.cost),
   );
 
+  console.log("\nXI and bench role locks...");
+  const starterLock = players.find(
+    (player) => player.position === 3 && player.rates.startProbability >= 0.6,
+  );
+  const benchLock = players.find(
+    (player) =>
+      player.position === 4 &&
+      player.id !== starterLock?.id &&
+      player.price <= 55,
+  );
+  if (starterLock && benchLock) {
+    const roleLocked = optimizeSquad(candidates, {
+      lockedStarters: [starterLock.id],
+      lockedBench: [benchLock.id],
+    });
+    const starterIds = new Set(roleLocked.startingXi.map((player) => player.id));
+    const benchIds = new Set(roleLocked.bench.map((player) => player.id));
+    console.log(
+      `  locked ${starterLock.name} in XI, ${benchLock.name} on bench → formation ${roleLocked.formation}`,
+    );
+    check(
+      "A player locked to the XI starts",
+      starterIds.has(starterLock.id),
+    );
+    check(
+      "A player locked to the bench sits",
+      benchIds.has(benchLock.id),
+    );
+    check(
+      "Role locks keep both players in the 15",
+      roleLocked.squad.some((player) => player.id === starterLock.id) &&
+        roleLocked.squad.some((player) => player.id === benchLock.id),
+    );
+  } else {
+    check("Found players to exercise role locks", false);
+  }
+
+  console.log("\nFixed formation...");
+  const fixed = optimizeSquad(candidates, { formation: "3-5-2" });
+  const defCount = fixed.startingXi.filter((player) => player.position === 2)
+    .length;
+  const midCount = fixed.startingXi.filter((player) => player.position === 3)
+    .length;
+  const fwdCount = fixed.startingXi.filter((player) => player.position === 4)
+    .length;
+  console.log(
+    `  forced 3-5-2 → ${fixed.formation} (${defCount}-${midCount}-${fwdCount}), XI xP ${fixed.startingXp.toFixed(1)}`,
+  );
+  check("A forced formation is honoured", fixed.formation === "3-5-2");
+  check(
+    "A 3-5-2 XI has three defenders",
+    defCount === 3 && midCount === 5 && fwdCount === 2,
+  );
+
   console.log("\nSelling prices");
   // Purchase price plus half of any profit, rounded down to the nearest £0.1m.
   const sellCases: Array<[number, number, number]> = [

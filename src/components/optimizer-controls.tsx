@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
 import { money, percent } from "@/lib/format";
+import { FORMATION_OPTIONS } from "@/lib/fpl/rules";
 import { MODEL } from "@/lib/model/config";
 
 import { cx, PositionBadge } from "./ui";
@@ -12,6 +13,7 @@ export interface PickerPlayer {
   id: number;
   name: string;
   teamShort: string;
+  teamId: number;
   position: 1 | 2 | 3 | 4;
   price: number;
   xpHorizon: number;
@@ -21,7 +23,11 @@ export interface OptimizerSettings {
   horizon: number;
   budget: number;
   minStart: number;
+  /** "auto" or a label like "4-4-2". */
+  formation: string;
   locked: number[];
+  lockedStarters: number[];
+  lockedBench: number[];
   excluded: number[];
 }
 
@@ -55,15 +61,27 @@ export function OptimizerControls({
       horizon: settings.horizon,
       budget,
       minStart,
+      formation: settings.formation,
       locked: settings.locked,
+      lockedStarters: settings.lockedStarters,
+      lockedBench: settings.lockedBench,
       excluded: settings.excluded,
       ...next,
     };
     params.set("horizon", String(merged.horizon));
     params.set("budget", String(merged.budget));
     params.set("minStart", merged.minStart.toFixed(2));
+    if (merged.formation && merged.formation !== "auto") {
+      params.set("formation", merged.formation);
+    } else params.delete("formation");
     if (merged.locked.length) params.set("lock", merged.locked.join(","));
     else params.delete("lock");
+    if (merged.lockedStarters.length) {
+      params.set("xi", merged.lockedStarters.join(","));
+    } else params.delete("xi");
+    if (merged.lockedBench.length) {
+      params.set("bench", merged.lockedBench.join(","));
+    } else params.delete("bench");
     if (merged.excluded.length) params.set("ban", merged.excluded.join(","));
     else params.delete("ban");
     startTransition(() => router.push(`/optimizer?${params}`));
@@ -79,8 +97,62 @@ export function OptimizerControls({
       .slice(0, 8);
   }, [players, search]);
 
-  const toggle = (list: number[], id: number) =>
-    list.includes(id) ? list.filter((value) => value !== id) : [...list, id];
+  const lockAs = (id: number, role: "xi" | "bench" | "squad") => {
+    const locked = settings.locked.includes(id)
+      ? settings.locked
+      : [...settings.locked, id];
+    if (role === "xi") {
+      apply({
+        locked,
+        lockedStarters: settings.lockedStarters.includes(id)
+          ? settings.lockedStarters
+          : [...settings.lockedStarters, id],
+        lockedBench: settings.lockedBench.filter((value) => value !== id),
+      });
+      return;
+    }
+    if (role === "bench") {
+      apply({
+        locked,
+        lockedBench: settings.lockedBench.includes(id)
+          ? settings.lockedBench
+          : [...settings.lockedBench, id],
+        lockedStarters: settings.lockedStarters.filter((value) => value !== id),
+      });
+      return;
+    }
+    apply({
+      locked,
+      lockedStarters: settings.lockedStarters.filter((value) => value !== id),
+      lockedBench: settings.lockedBench.filter((value) => value !== id),
+    });
+  };
+
+  const unlock = (id: number) =>
+    apply({
+      locked: settings.locked.filter((value) => value !== id),
+      lockedStarters: settings.lockedStarters.filter((value) => value !== id),
+      lockedBench: settings.lockedBench.filter((value) => value !== id),
+    });
+
+  const toggleBan = (id: number) => {
+    const excluded = settings.excluded.includes(id)
+      ? settings.excluded.filter((value) => value !== id)
+      : [...settings.excluded, id];
+    apply({
+      excluded,
+      locked: settings.locked.filter((value) => value !== id),
+      lockedStarters: settings.lockedStarters.filter((value) => value !== id),
+      lockedBench: settings.lockedBench.filter((value) => value !== id),
+    });
+  };
+
+  const roleOf = (id: number): "xi" | "bench" | "squad" | null => {
+    if (settings.lockedStarters.includes(id)) return "xi";
+    if (settings.lockedBench.includes(id)) return "bench";
+    if (settings.locked.includes(id)) return "squad";
+    return null;
+  };
 
   return (
     <div className="space-y-4 rounded-2xl border border-line bg-surface/80 p-4">
@@ -158,62 +230,144 @@ export function OptimizerControls({
 
       <div className="border-t border-line pt-4">
         <label className="text-[11px] tracking-wider text-ink-dim uppercase">
+          Formation
+        </label>
+        <div className="mt-1 flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => apply({ formation: "auto" })}
+            className={cx(
+              "rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors",
+              settings.formation === "auto"
+                ? "border-accent bg-accent text-brand"
+                : "border-line bg-surface-2 text-ink-muted hover:border-accent/40 hover:text-ink",
+            )}
+          >
+            Auto
+          </button>
+          {FORMATION_OPTIONS.map((label) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => apply({ formation: label })}
+              className={cx(
+                "rounded-md border px-2.5 py-1.5 text-xs font-medium tabular-nums transition-colors",
+                settings.formation === label
+                  ? "border-accent bg-accent text-brand"
+                  : "border-line bg-surface-2 text-ink-muted hover:border-accent/40 hover:text-ink",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1 text-xs text-ink-dim">
+          Auto picks the highest-scoring legal shape. A fixed formation rebuilds
+          the XI and bench around that DEF-MID-FWD split.
+        </p>
+      </div>
+
+      <div className="border-t border-line pt-4">
+        <label className="text-[11px] tracking-wider text-ink-dim uppercase">
           Lock in or rule out players
         </label>
         <input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search a player to lock or ban"
+          placeholder="Search a player to lock into the XI, bench, or squad"
           className="mt-1 w-full rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm outline-none focus:border-accent"
         />
 
         {results.length > 0 && (
           <ul className="mt-2 divide-y divide-line overflow-hidden rounded-lg border border-line">
-            {results.map((player) => (
-              <li
-                key={player.id}
-                className="flex items-center gap-2 bg-surface-2/60 px-3 py-2 text-sm"
-              >
-                <PositionBadge position={player.position} />
-                <span className="font-medium">{player.name}</span>
-                <span className="text-xs text-ink-dim">
-                  {player.teamShort} · {money(player.price)} ·{" "}
-                  {player.xpHorizon.toFixed(1)} xP
-                </span>
-                <div className="ml-auto flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      apply({ locked: toggle(settings.locked, player.id) })
-                    }
-                    className="rounded-md border border-accent/40 px-2 py-1 text-xs text-accent hover:bg-accent/10"
-                  >
-                    {settings.locked.includes(player.id) ? "Unlock" : "Lock in"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      apply({ excluded: toggle(settings.excluded, player.id) })
-                    }
-                    className="rounded-md border border-danger/40 px-2 py-1 text-xs text-danger hover:bg-danger/10"
-                  >
-                    {settings.excluded.includes(player.id) ? "Allow" : "Rule out"}
-                  </button>
-                </div>
-              </li>
-            ))}
+            {results.map((player) => {
+              const role = roleOf(player.id);
+              return (
+                <li
+                  key={player.id}
+                  className="flex flex-wrap items-center gap-2 bg-surface-2/60 px-3 py-2 text-sm"
+                >
+                  <PositionBadge position={player.position} />
+                  <span className="font-medium">{player.name}</span>
+                  <span className="text-xs text-ink-dim">
+                    {player.teamShort} · {money(player.price)} ·{" "}
+                    {player.xpHorizon.toFixed(1)} xP
+                  </span>
+                  <div className="ml-auto flex flex-wrap gap-1.5">
+                    {role ? (
+                      <button
+                        type="button"
+                        onClick={() => unlock(player.id)}
+                        className="rounded-md border border-accent/40 px-2 py-1 text-xs text-accent hover:bg-accent/10"
+                      >
+                        Unlock
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => lockAs(player.id, "xi")}
+                          className="rounded-md border border-accent/40 px-2 py-1 text-xs text-accent hover:bg-accent/10"
+                        >
+                          Lock XI
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => lockAs(player.id, "bench")}
+                          className="rounded-md border border-accent/40 px-2 py-1 text-xs text-accent hover:bg-accent/10"
+                        >
+                          Lock bench
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => lockAs(player.id, "squad")}
+                          className="rounded-md border border-line-strong px-2 py-1 text-xs text-ink-muted hover:text-ink"
+                        >
+                          Lock squad
+                        </button>
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => toggleBan(player.id)}
+                      className="rounded-md border border-danger/40 px-2 py-1 text-xs text-danger hover:bg-danger/10"
+                    >
+                      {settings.excluded.includes(player.id)
+                        ? "Allow"
+                        : "Rule out"}
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
 
         <div className="mt-3 flex flex-wrap gap-4">
           <ChipList
-            label="Locked in"
-            ids={settings.locked}
+            label="Locked in XI"
+            ids={settings.lockedStarters}
             byId={byId}
             tone="accent"
-            onRemove={(id) =>
-              apply({ locked: settings.locked.filter((value) => value !== id) })
-            }
+            onRemove={unlock}
+          />
+          <ChipList
+            label="Locked on bench"
+            ids={settings.lockedBench}
+            byId={byId}
+            tone="accent"
+            onRemove={unlock}
+          />
+          <ChipList
+            label="Locked in squad"
+            ids={settings.locked.filter(
+              (id) =>
+                !settings.lockedStarters.includes(id) &&
+                !settings.lockedBench.includes(id),
+            )}
+            byId={byId}
+            tone="accent"
+            onRemove={unlock}
           />
           <ChipList
             label="Ruled out"

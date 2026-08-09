@@ -192,6 +192,17 @@ export function formationLabel(counts: Record<PositionId, number>): string {
   return `${counts[2]}-${counts[3]}-${counts[4]}`;
 }
 
+/** Labels for every legal formation, e.g. "4-4-2". */
+export const FORMATION_OPTIONS = FORMATIONS.map(formationLabel);
+
+/** Resolves a "4-4-2" label to position counts, or null when unknown / auto. */
+export function parseFormation(
+  label: string | null | undefined,
+): Record<PositionId, number> | null {
+  if (!label || label === "auto") return null;
+  return FORMATIONS.find((formation) => formationLabel(formation) === label) ?? null;
+}
+
 /** Price paid back when selling: purchase price plus half of any profit. */
 export function sellPriceTenths(
   purchaseTenths: number,

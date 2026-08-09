@@ -1,4 +1,4 @@
-import { type PositionId, SQUAD } from "../fpl/rules";
+import { parseFormation, type PositionId, SQUAD } from "../fpl/rules";
 import { MODEL } from "../model/config";
 import { bestXi, type BestXi, isLegalSquad, type OptimizerPlayer } from "./xi";
 
@@ -8,8 +8,17 @@ export interface SquadOptions {
   maxPerClub?: number;
   /** Players that must appear in the squad. */
   locked?: number[];
+  /** Locked players that must start in the XI. */
+  lockedStarters?: number[];
+  /** Locked players that must sit on the bench. */
+  lockedBench?: number[];
   /** Players that must not appear in the squad. */
   excluded?: number[];
+  /**
+   * Fix the starting shape to this label (e.g. "3-5-2"). When omitted the
+   * optimiser picks the highest-scoring legal formation for each candidate squad.
+   */
+  formation?: string | null;
   /** Candidate pool size per position; larger is slower but searches wider. */
   pool?: Record<number, number>;
   /** Randomised restarts. More restarts means a better answer and more time. */
@@ -211,7 +220,16 @@ function construct(
 }
 
 /** Exhaustive single-swap hill climbing, then a pruned double-swap pass. */
-function improve(working: Working, pool: OptimizerPlayer[], locked: Set<number>) {
+function improve(
+  working: Working,
+  pool: OptimizerPlayer[],
+  locked: Set<number>,
+  constraints: {
+    mustStart: Set<number>;
+    mustBench: Set<number>;
+    formation?: string | null;
+  },
+) {
   const byPosition = new Map<PositionId, OptimizerPlayer[]>();
   for (const position of POSITIONS) {
     byPosition.set(
@@ -222,7 +240,7 @@ function improve(working: Working, pool: OptimizerPlayer[], locked: Set<number>)
     );
   }
 
-  let score = bestXi(working.players).score;
+  let score = bestXi(working.players, "xp", constraints).score;
 
   for (let pass = 0; pass < 60; pass++) {
     let best: { out: OptimizerPlayer; in: OptimizerPlayer; score: number } | null =
@@ -235,7 +253,7 @@ function improve(working: Working, pool: OptimizerPlayer[], locked: Set<number>)
         const trial = working.players.map((player) =>
           player.id === outgoing.id ? incoming : player,
         );
-        const trialScore = bestXi(trial).score;
+        const trialScore = bestXi(trial, "xp", constraints).score;
         if (
           trialScore > score + 1e-9 &&
           (!best || trialScore > best.score)
@@ -253,7 +271,13 @@ function improve(working: Working, pool: OptimizerPlayer[], locked: Set<number>)
 
     // No single swap helps. Try swapping two players at once, which is how the
     // search escapes "I can only afford this upgrade by downgrading elsewhere".
-    const doubleSwap = findDoubleSwap(working, byPosition, locked, score);
+    const doubleSwap = findDoubleSwap(
+      working,
+      byPosition,
+      locked,
+      score,
+      constraints,
+    );
     if (!doubleSwap) break;
     working.swap(doubleSwap.outA, doubleSwap.inA);
     working.swap(doubleSwap.outB, doubleSwap.inB);
@@ -268,6 +292,11 @@ function findDoubleSwap(
   byPosition: Map<PositionId, OptimizerPlayer[]>,
   locked: Set<number>,
   currentScore: number,
+  constraints: {
+    mustStart: Set<number>;
+    mustBench: Set<number>;
+    formation?: string | null;
+  },
 ) {
   const squad = working.snapshot();
   const shortlist = (position: PositionId) =>
@@ -308,7 +337,7 @@ function findDoubleSwap(
           );
           if (!isLegalSquad(trial, working.maxPerClub)) continue;
 
-          const score = bestXi(trial).score;
+          const score = bestXi(trial, "xp", constraints).score;
           if (score > currentScore + 1e-9 && (!best || score > best.score)) {
             best = { outA, inA, outB, inB, score };
           }
@@ -338,14 +367,69 @@ export function optimizeSquad(
   const budget = options.budget ?? SQUAD.budgetTenths;
   const maxPerClub = options.maxPerClub ?? SQUAD.maxPerClub;
   const locked = new Set(options.locked ?? []);
+  const mustStart = new Set(options.lockedStarters ?? []);
+  const mustBench = new Set(options.lockedBench ?? []);
+  // Role locks imply squad locks — a player pinned to the XI or bench must stay
+  // in the 15, otherwise the role constraint cannot be satisfied.
+  for (const id of mustStart) locked.add(id);
+  for (const id of mustBench) locked.add(id);
+  for (const id of mustStart) {
+    if (mustBench.has(id)) mustBench.delete(id);
+  }
+  const formation = options.formation ?? null;
+  const formationShape = parseFormation(formation);
+  const constraints = { mustStart, mustBench, formation };
   const restarts = options.restarts ?? MODEL.optimiserRestarts;
   const warnings: string[] = [];
 
-  const pool = buildPool(candidates, options);
+  if (options.formation && !formationShape) {
+    warnings.push(
+      `Formation "${options.formation}" is not legal in 2026/27 — choosing automatically.`,
+    );
+    constraints.formation = null;
+  }
+
+  const pool = buildPool(candidates, { ...options, locked: [...locked] });
   for (const id of locked) {
     if (!pool.some((player) => player.id === id)) {
       warnings.push(`Player ${id} cannot be selected and was ignored.`);
       locked.delete(id);
+      mustStart.delete(id);
+      mustBench.delete(id);
+    }
+  }
+
+  const lockedGkStarters = pool.filter(
+    (player) => mustStart.has(player.id) && player.position === 1,
+  );
+  if (lockedGkStarters.length > 1) {
+    warnings.push(
+      "Only one goalkeeper can start — extra locked keepers were moved to the bench.",
+    );
+    for (const keeper of lockedGkStarters.slice(1)) {
+      mustStart.delete(keeper.id);
+      mustBench.add(keeper.id);
+    }
+  }
+
+  // A fixed formation can seat fewer of a position than the user locked into the
+  // XI. Keep the highest-projected locks and free the rest so the shape fits.
+  const activeFormation = parseFormation(constraints.formation);
+  if (activeFormation) {
+    for (const position of POSITIONS) {
+      const lockedInPos = pool
+        .filter(
+          (player) =>
+            mustStart.has(player.id) && player.position === position,
+        )
+        .sort((a, b) => b.xp - a.xp);
+      const allowed = activeFormation[position];
+      if (lockedInPos.length <= allowed) continue;
+      const demoted = lockedInPos.slice(allowed);
+      warnings.push(
+        `${constraints.formation} only starts ${allowed} in that position — extra locked players were freed from the XI.`,
+      );
+      for (const player of demoted) mustStart.delete(player.id);
     }
   }
 
@@ -375,7 +459,7 @@ export function optimizeSquad(
       if (working.canAdd(player)) working.add(player);
     }
     if (!construct(ordering, pool, working)) continue;
-    const score = improve(working, pool, locked);
+    const score = improve(working, pool, locked, constraints);
     if (!best || score > best.score) {
       best = { squad: working.snapshot(), cost: working.cost, score };
     }
@@ -403,7 +487,7 @@ export function optimizeSquad(
   }
 
   return {
-    ...bestXi(best.squad),
+    ...bestXi(best.squad, "xp", constraints),
     squad: best.squad,
     cost: best.cost,
     budget,
