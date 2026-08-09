@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+@theme {
+  --color-canvas: #0b0b12;
+  --color-surface: #14141f;
+  --color-surface-2: #1c1c2b;
+  --color-line: #2a2a3d;
+  --color-line-strong: #3a3a52;
+  --color-ink: #f2f2f7;
+  --color-ink-muted: #9b9bb0;
+  --color-ink-dim: #6f6f85;
+  --color-accent: #00ff87;
+  --color-accent-dim: #00c76a;
+  --color-cyan: #04f5ff;
+  --color-brand: #37003c;
+  --color-warn: #ffb020;
+  --color-danger: #ff5c5c;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background:
+    radial-gradient(900px 500px at 12% -10%, rgba(55, 0, 60, 0.55), transparent),
+    radial-gradient(700px 400px at 90% 0%, rgba(4, 245, 255, 0.08), transparent),
+    var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/* Difficulty ratings use the same 1-5 colour language as the official site. */
+.fdr-1 {
+  background-color: #0e6b3f;
+  color: #d7ffe9;
+}
+.fdr-2 {
+  background-color: #15804a;
+  color: #eaffef;
+}
+.fdr-3 {
+  background-color: #3f3f52;
+  color: #e9e9f2;
+}
+.fdr-4 {
+  background-color: #8f3030;
+  color: #ffe9e9;
+}
+.fdr-5 {
+  background-color: #6d1414;
+  color: #ffdede;
+}
+
+/* Thin, unobtrusive scrollbars for the wide data tables. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-line-strong);
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
