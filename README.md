@@ -44,9 +44,13 @@ server-side and cached.
 - **Fixtures** — a difficulty ticker for every club over the next few gameweeks,
   ordered by the easiest run, with the model's expected goals for and against.
 - **Squad builder** — the best 15 for your budget over a horizon you choose, with
-  players you can lock in or rule out.
+  players you can lock in or rule out, a fixed formation if you want one, and a
+  chip mode (Bench Boost, Triple Captain, Free Hit, Wildcard) that retunes the
+  objective for the chip week while still considering the rest of the run
+  (except Free Hit, which is a one-week build).
 - **My team** — enter your public FPL team ID for your recommended XI, captain,
-  bench order, transfer suggestions and chip advice.
+  bench order, transfer suggestions and chip advice, with links into the builder
+  preconfigured for each chip.
 
 ## 2026/27 rules
 

@@ -4,7 +4,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
 import { money, percent } from "@/lib/format";
-import { FORMATION_OPTIONS } from "@/lib/fpl/rules";
+import {
+  CHIP_LABEL,
+  type ChipName,
+  FORMATION_OPTIONS,
+} from "@/lib/fpl/rules";
 import { MODEL } from "@/lib/model/config";
 
 import { cx, PositionBadge } from "./ui";
@@ -19,17 +23,53 @@ export interface PickerPlayer {
   xpHorizon: number;
 }
 
+export type OptimizerChip = ChipName | null;
+
 export interface OptimizerSettings {
   horizon: number;
   budget: number;
   minStart: number;
   /** "auto" or a label like "4-4-2". */
   formation: string;
+  /** Chip planned for the first gameweek of the horizon. */
+  chip: OptimizerChip;
   locked: number[];
   lockedStarters: number[];
   lockedBench: number[];
   excluded: number[];
 }
+
+const CHIP_OPTIONS: Array<{
+  value: OptimizerChip;
+  label: string;
+  hint: string;
+}> = [
+  {
+    value: null,
+    label: "None",
+    hint: "Default scoring — build a squad to hold across the horizon.",
+  },
+  {
+    value: "bboost",
+    label: CHIP_LABEL.bboost,
+    hint: "Bench counts fully in the chip week; the rest of the horizon stays discounted.",
+  },
+  {
+    value: "3xc",
+    label: CHIP_LABEL["3xc"],
+    hint: "Favours squads with a standout captain fixture in the chip week.",
+  },
+  {
+    value: "freehit",
+    label: CHIP_LABEL.freehit,
+    hint: "Forces the horizon to 1 — Free Hit reverts after the week.",
+  },
+  {
+    value: "wildcard",
+    label: CHIP_LABEL.wildcard,
+    hint: "Same objective as none — a wildcard squad is held for the run.",
+  },
+];
 
 /**
  * Controls for the squad builder. Every setting is written to the URL so the
@@ -62,18 +102,23 @@ export function OptimizerControls({
       budget,
       minStart,
       formation: settings.formation,
+      chip: settings.chip,
       locked: settings.locked,
       lockedStarters: settings.lockedStarters,
       lockedBench: settings.lockedBench,
       excluded: settings.excluded,
       ...next,
     };
+    // Free Hit reverts after one week, so the search only looks at that week.
+    if (merged.chip === "freehit") merged.horizon = 1;
     params.set("horizon", String(merged.horizon));
     params.set("budget", String(merged.budget));
     params.set("minStart", merged.minStart.toFixed(2));
     if (merged.formation && merged.formation !== "auto") {
       params.set("formation", merged.formation);
     } else params.delete("formation");
+    if (merged.chip) params.set("chip", merged.chip);
+    else params.delete("chip");
     if (merged.locked.length) params.set("lock", merged.locked.join(","));
     else params.delete("lock");
     if (merged.lockedStarters.length) {
@@ -86,6 +131,10 @@ export function OptimizerControls({
     else params.delete("ban");
     startTransition(() => router.push(`/optimizer?${params}`));
   };
+
+  const activeChipHint =
+    CHIP_OPTIONS.find((option) => option.value === settings.chip)?.hint ??
+    CHIP_OPTIONS[0].hint;
 
   const results = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -169,12 +218,16 @@ export function OptimizerControls({
               <button
                 key={value}
                 type="button"
+                disabled={settings.chip === "freehit" && value !== 1}
                 onClick={() => apply({ horizon: value })}
                 className={cx(
                   "flex-1 rounded-md py-1 text-xs font-medium transition-colors",
                   settings.horizon === value
                     ? "bg-accent text-brand"
                     : "text-ink-muted hover:text-ink",
+                  settings.chip === "freehit" &&
+                    value !== 1 &&
+                    "cursor-not-allowed opacity-40 hover:text-ink-muted",
                 )}
               >
                 {value}
@@ -182,7 +235,9 @@ export function OptimizerControls({
             ))}
           </div>
           <p className="mt-1 text-xs text-ink-dim">
-            Gameweeks the squad is optimised over.
+            {settings.chip === "freehit"
+              ? "Free Hit locks the horizon to 1 gameweek."
+              : "Gameweeks the squad is optimised over."}
           </p>
         </div>
 
@@ -226,6 +281,30 @@ export function OptimizerControls({
             Filters out players unlikely to be picked by their manager.
           </p>
         </div>
+      </div>
+
+      <div className="border-t border-line pt-4">
+        <label className="text-[11px] tracking-wider text-ink-dim uppercase">
+          Chip
+        </label>
+        <div className="mt-1 flex flex-wrap gap-1.5">
+          {CHIP_OPTIONS.map((option) => (
+            <button
+              key={option.label}
+              type="button"
+              onClick={() => apply({ chip: option.value })}
+              className={cx(
+                "rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors",
+                settings.chip === option.value
+                  ? "border-accent bg-accent text-brand"
+                  : "border-line bg-surface-2 text-ink-muted hover:border-accent/40 hover:text-ink",
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1 text-xs text-ink-dim">{activeChipHint}</p>
       </div>
 
       <div className="border-t border-line pt-4">

@@ -5,12 +5,17 @@ import {
 import { OptimizerPitch } from "@/components/optimizer-pitch";
 import { Badge, Card, EmptyState, PageHeader, Stat } from "@/components/ui";
 import { money, points } from "@/lib/format";
+import { getBootstrap } from "@/lib/fpl/api";
 import {
+  CHIP_LABEL,
+  CHIPS,
+  type ChipName,
   POSITION_NAME,
   type PositionId,
   parseFormation,
   SQUAD,
 } from "@/lib/fpl/rules";
+import { chipAvailability } from "@/lib/fpl/season";
 import { MODEL } from "@/lib/model/config";
 import { buildProjections } from "@/lib/model/projections";
 import { buildCandidates } from "@/lib/optimizer/candidates";
@@ -27,6 +32,33 @@ function parseIds(value: string | undefined): number[] {
     .filter((id) => Number.isFinite(id) && id > 0);
 }
 
+function parseChip(value: string | undefined): ChipName | null {
+  if (!value) return null;
+  return (CHIPS.names as readonly string[]).includes(value)
+    ? (value as ChipName)
+    : null;
+}
+
+function chipSubtitle(
+  chip: ChipName | null,
+  from: number,
+  to: number,
+): string {
+  if (chip === "bboost") {
+    return `Optimised for Bench Boost in GW${from}: the bench counts fully that week while the rest of GW${from}–${to} still shapes the squad.`;
+  }
+  if (chip === "3xc") {
+    return `Optimised for Triple Captain in GW${from}: squads with a monster captain fixture that week score higher.`;
+  }
+  if (chip === "freehit") {
+    return `Optimised for Free Hit in GW${from} only — the chip reverts after the week, so the horizon is locked to 1.`;
+  }
+  if (chip === "wildcard") {
+    return `Wildcard mode uses the same hold-and-play objective as a normal build across GW${from}–${to}.`;
+  }
+  return `The best 15 the money can buy for GW${from}–${to}: maximum projected points inside the budget, the squad split and the club limit.`;
+}
+
 export default async function OptimizerPage({
   searchParams,
 }: {
@@ -35,6 +67,7 @@ export default async function OptimizerPage({
     budget?: string;
     minStart?: string;
     formation?: string;
+    chip?: string;
     lock?: string;
     xi?: string;
     bench?: string;
@@ -42,10 +75,14 @@ export default async function OptimizerPage({
   }>;
 }) {
   const params = await searchParams;
-  const horizon = Math.min(
+  const chip = parseChip(params.chip);
+  const requestedHorizon = Math.min(
     MODEL.maxHorizon,
     Math.max(1, Number(params.horizon) || MODEL.defaultHorizon),
   );
+  // Free Hit only lasts one week, so a multi-week horizon would optimise the
+  // wrong thing. Force the single-week view regardless of the URL horizon.
+  const horizon = chip === "freehit" ? 1 : requestedHorizon;
   const budget = Math.max(600, Number(params.budget) || SQUAD.budgetTenths);
   const minStart = Math.min(0.9, Math.max(0, Number(params.minStart) || 0.25));
   const formationParam = params.formation?.trim() || "auto";
@@ -64,7 +101,10 @@ export default async function OptimizerPage({
   ];
   const excluded = parseIds(params.ban);
 
-  const projections = await buildProjections(horizon);
+  const [projections, bootstrap] = await Promise.all([
+    buildProjections(horizon),
+    getBootstrap(),
+  ]);
   const candidates = buildCandidates(projections.players, {
     minStartProbability: minStart,
   });
@@ -76,7 +116,28 @@ export default async function OptimizerPage({
     lockedBench,
     excluded,
     formation: formation === "auto" ? null : formation,
+    chip,
   });
+
+  const targetEvent = projections.horizon.from;
+  const availability = chipAvailability(bootstrap, []);
+  const chipOpen =
+    !chip ||
+    availability.some(
+      (entry) =>
+        entry.chip === chip &&
+        targetEvent >= entry.window.startEvent &&
+        targetEvent <= entry.window.stopEvent,
+    );
+  const chipWindowHint = (() => {
+    if (!chip || chipOpen) return null;
+    const next = availability
+      .filter((entry) => entry.chip === chip)
+      .sort((a, b) => a.window.startEvent - b.window.startEvent)[0];
+    return next
+      ? `${CHIP_LABEL[chip]} is not playable in GW${targetEvent}. Its windows run GW${next.window.startEvent}–${next.window.stopEvent} (and the matching second-half window). The squad below is still built as if you play it.`
+      : `${CHIP_LABEL[chip]} is not playable in GW${targetEvent}. The squad below is still built as if you play it.`;
+  })();
 
   const rowFor = (id: number) => {
     const player = projections.byId.get(id);
@@ -113,13 +174,24 @@ export default async function OptimizerPage({
     };
   });
 
+  const chipWeekBenchXp = solution.bench.reduce((total, player) => {
+    const projection = projections.byId.get(player.id);
+    return total + (projection?.xpNext ?? player.xpNext);
+  }, 0);
+
+  const xiPlusBench =
+    solution.startingXp +
+    (chip === "bboost" ? chipWeekBenchXp : solution.weightedBenchXp);
+
   return (
     <>
       <PageHeader
         title="Squad builder"
-        description={`The best 15 the money can buy for GW${projections.horizon.from}–${projections.horizon.to}: maximum projected points inside the ${money(
-          budget,
-        )} budget, the ${SQUAD.select[1]}/${SQUAD.select[2]}/${SQUAD.select[3]}/${SQUAD.select[4]} squad split and the ${SQUAD.maxPerClub}-per-club limit. Pick a formation, lock players, or replace anyone on the pitch.`}
+        description={`${chipSubtitle(
+          chip,
+          projections.horizon.from,
+          projections.horizon.to,
+        )} Pick a formation, lock players, replace anyone on the pitch, or plan a chip.`}
       />
 
       <OptimizerControls
@@ -129,6 +201,7 @@ export default async function OptimizerPage({
           budget,
           minStart,
           formation,
+          chip,
           locked,
           lockedStarters,
           lockedBench,
@@ -136,9 +209,10 @@ export default async function OptimizerPage({
         }}
       />
 
-      {solution.warnings.length > 0 && (
+      {(solution.warnings.length > 0 || chipWindowHint) && (
         <div className="mt-4 rounded-xl border border-warn/40 bg-warn/5 px-4 py-3 text-sm text-warn">
           <ul className="list-inside list-disc space-y-1">
+            {chipWindowHint && <li>{chipWindowHint}</li>}
             {solution.warnings.map((warning) => (
               <li key={warning}>{warning}</li>
             ))}
@@ -157,10 +231,20 @@ export default async function OptimizerPage({
         <>
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Stat
-              label="Projected XI points"
-              value={points(solution.startingXp)}
+              label={
+                chip === "bboost"
+                  ? "XI + chip-week bench"
+                  : "Projected XI points"
+              }
+              value={points(
+                chip === "bboost" ? xiPlusBench : solution.startingXp,
+              )}
               tone="accent"
-              hint={`Over GW${projections.horizon.from}–${projections.horizon.to}, captain not counted`}
+              hint={
+                chip === "bboost"
+                  ? `Starting XI over GW${projections.horizon.from}–${projections.horizon.to} plus full bench in GW${projections.horizon.from}`
+                  : `Over GW${projections.horizon.from}–${projections.horizon.to}, captain not counted`
+              }
             />
             <Stat
               label="Squad cost"
@@ -180,16 +264,47 @@ export default async function OptimizerPage({
                     }`
               }
             />
-            <Stat
-              label="Bench points"
-              value={points(solution.benchXp)}
-              hint="What a Bench Boost would be worth over the horizon"
-            />
+            {chip === "3xc" ? (
+              <Stat
+                label="Triple Captain gain"
+                value={points(solution.chipGain)}
+                hint={
+                  solution.captain
+                    ? `Extra ×2 on ${
+                        projections.byId.get(solution.captain.id)?.name ??
+                        "captain"
+                      } in GW${projections.horizon.from}`
+                    : `Extra captain multipliers in GW${projections.horizon.from}`
+                }
+              />
+            ) : chip === "bboost" ? (
+              <Stat
+                label="Chip-week bench"
+                value={points(chipWeekBenchXp)}
+                hint={`What Bench Boost adds in GW${projections.horizon.from} (horizon remainder still discounted in the score)`}
+              />
+            ) : chip === "freehit" ? (
+              <Stat
+                label="Free Hit week"
+                value={`GW${projections.horizon.from}`}
+                hint="Horizon forced to 1 because Free Hit reverts after the week"
+              />
+            ) : (
+              <Stat
+                label="Bench points"
+                value={points(solution.benchXp)}
+                hint="What a Bench Boost would be worth over the horizon"
+              />
+            )}
           </div>
 
           <div className="mt-4 grid gap-4 lg:grid-cols-3">
             <Card
-              title={`Suggested squad for gameweek ${projections.horizon.from}`}
+              title={
+                chip
+                  ? `Suggested ${CHIP_LABEL[chip]} squad for gameweek ${projections.horizon.from}`
+                  : `Suggested squad for gameweek ${projections.horizon.from}`
+              }
               subtitle={`Captain armband goes to the highest projection for GW${projections.horizon.from}. Lock pins a spot; Replace swaps that player for another in the same position.`}
               className="lg:col-span-2"
               action={
@@ -245,12 +360,18 @@ export default async function OptimizerPage({
                 <p className="text-sm text-ink-muted">
                   Squads are scored by their best legal starting XI plus a
                   discounted bench, because a bench player only scores when a
-                  starter does not play. The search builds{" "}
-                  {solution.restarts + 2} squads from different starting points
-                  and improves each one with single and double swaps, keeping the
-                  best. It is the best squad found rather than a mathematical
-                  certificate, though with this many restarts the two rarely
-                  differ.
+                  starter does not play
+                  {chip === "bboost"
+                    ? " — except under Bench Boost, when the chip week counts in full and only the rest of the horizon is discounted"
+                    : ""}
+                  {chip === "3xc"
+                    ? ". Triple Captain adds the two extra captain multipliers for the chip week to the score"
+                    : ""}
+                  . The search builds {solution.restarts + 2} squads from
+                  different starting points and improves each one with single and
+                  double swaps, keeping the best. It is the best squad found
+                  rather than a mathematical certificate, though with this many
+                  restarts the two rarely differ.
                 </p>
                 <p className="mt-3 text-sm text-ink-muted">
                   Locking from the pitch pins a player to that role — XI or bench —
@@ -259,7 +380,11 @@ export default async function OptimizerPage({
                   formation scores every candidate squad as that shape, so the
                   search builds for 3-5-2 (or whatever you pick) rather than
                   whatever happens to score highest. Set the horizon to 1 to chase
-                  the coming gameweek, or 6–8 to build for a fixture run.
+                  the coming gameweek, or 6–8 to build for a fixture run
+                  {chip === "freehit"
+                    ? " — Free Hit overrides this and always uses a one-week horizon"
+                    : ""}
+                  .
                 </p>
               </Card>
             </div>

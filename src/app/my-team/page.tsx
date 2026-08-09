@@ -317,6 +317,16 @@ export default async function MyTeamPage({
                     )}
                   </div>
                   <p className="mt-0.5 text-xs text-ink-dim">{chip.reason}</p>
+                  <p className="mt-1 text-xs">
+                    <Link
+                      href={`/optimizer?chip=${chip.chip}&budget=${
+                        analysis.squadValue + bank
+                      }${chip.chip === "freehit" ? "&horizon=1" : ""}`}
+                      className="text-accent hover:underline"
+                    >
+                      Build best {chip.label} squad →
+                    </Link>
+                  </p>
                 </li>
               ))}
             </ul>

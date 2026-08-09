@@ -29,7 +29,7 @@ import {
   type OwnedPlayer,
   planTransfers,
 } from "../src/lib/optimizer/transfers";
-import { isLegalSquad } from "../src/lib/optimizer/xi";
+import { isLegalSquad, bestXi } from "../src/lib/optimizer/xi";
 
 let failures = 0;
 
@@ -239,6 +239,66 @@ async function main() {
     "A 3-5-2 XI has three defenders",
     defCount === 3 && midCount === 5 && fwdCount === 2,
   );
+
+  console.log("\nChip-aware squad scoring...");
+  const plain = optimizeSquad(candidates, { budget: SQUAD.budgetTenths });
+  const forBenchBoost = optimizeSquad(candidates, {
+    budget: SQUAD.budgetTenths,
+    chip: "bboost",
+  });
+  const forTripleCaptain = optimizeSquad(candidates, {
+    budget: SQUAD.budgetTenths,
+    chip: "3xc",
+  });
+
+  const plainBenchNext = plain.bench.reduce((total, player) => total + player.xpNext, 0);
+  const bbBenchNext = forBenchBoost.bench.reduce(
+    (total, player) => total + player.xpNext,
+    0,
+  );
+  console.log(
+    `  default bench GW xP ${plainBenchNext.toFixed(1)} vs Bench Boost bench GW xP ${bbBenchNext.toFixed(1)}`,
+  );
+  check(
+    "Bench Boost squad has at least as much chip-week bench xP as the default",
+    bbBenchNext + 1e-9 >= plainBenchNext,
+    `${bbBenchNext.toFixed(2)} vs ${plainBenchNext.toFixed(2)}`,
+  );
+
+  const plainCaptainNext = plain.captain?.xpNext ?? 0;
+  const tcCaptainNext = forTripleCaptain.captain?.xpNext ?? 0;
+  console.log(
+    `  default captain GW xP ${plainCaptainNext.toFixed(1)} vs Triple Captain ${tcCaptainNext.toFixed(1)}`,
+  );
+  check(
+    "Triple Captain squad's captain has at least as much chip-week xP as the default",
+    tcCaptainNext + 1e-9 >= plainCaptainNext,
+    `${tcCaptainNext.toFixed(2)} vs ${plainCaptainNext.toFixed(2)}`,
+  );
+
+  if (plain.squad.length === SQUAD.size) {
+    const scoredPlain = bestXi(plain.squad, "xp", {});
+    const scoredAsBb = bestXi(plain.squad, "xp", { chip: "bboost" });
+    const scoredAsTc = bestXi(plain.squad, "xp", { chip: "3xc" });
+    check(
+      "Bench Boost objective is at least the plain score for the same squad",
+      scoredAsBb.score + 1e-9 >= scoredPlain.score,
+      `${scoredAsBb.score.toFixed(2)} vs ${scoredPlain.score.toFixed(2)}`,
+    );
+    check(
+      "Triple Captain objective is at least the plain score for the same squad",
+      scoredAsTc.score + 1e-9 >= scoredPlain.score,
+      `${scoredAsTc.score.toFixed(2)} vs ${scoredPlain.score.toFixed(2)}`,
+    );
+    check(
+      "Chip gain matches the score uplift for Triple Captain",
+      Math.abs(scoredAsTc.score - scoredPlain.score - scoredAsTc.chipGain) < 1e-6,
+    );
+    check(
+      "Chip gain is non-negative under Bench Boost",
+      scoredAsBb.chipGain >= -1e-9,
+    );
+  }
 
   console.log("\nSelling prices");
   // Purchase price plus half of any profit, rounded down to the nearest £0.1m.

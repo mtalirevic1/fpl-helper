@@ -1,4 +1,9 @@
-import { parseFormation, type PositionId, SQUAD } from "../fpl/rules";
+import {
+  type ChipName,
+  parseFormation,
+  type PositionId,
+  SQUAD,
+} from "../fpl/rules";
 import { MODEL } from "../model/config";
 import { bestXi, type BestXi, isLegalSquad, type OptimizerPlayer } from "./xi";
 
@@ -19,11 +24,20 @@ export interface SquadOptions {
    * optimiser picks the highest-scoring legal formation for each candidate squad.
    */
   formation?: string | null;
+  /** Chip planned for the first gameweek of the horizon. */
+  chip?: ChipName | null;
   /** Candidate pool size per position; larger is slower but searches wider. */
   pool?: Record<number, number>;
   /** Randomised restarts. More restarts means a better answer and more time. */
   restarts?: number;
 }
+
+type XiSearchConstraints = {
+  mustStart: Set<number>;
+  mustBench: Set<number>;
+  formation?: string | null;
+  chip?: ChipName | null;
+};
 
 export interface SquadSolution extends BestXi {
   squad: OptimizerPlayer[];
@@ -224,11 +238,7 @@ function improve(
   working: Working,
   pool: OptimizerPlayer[],
   locked: Set<number>,
-  constraints: {
-    mustStart: Set<number>;
-    mustBench: Set<number>;
-    formation?: string | null;
-  },
+  constraints: XiSearchConstraints,
 ) {
   const byPosition = new Map<PositionId, OptimizerPlayer[]>();
   for (const position of POSITIONS) {
@@ -292,11 +302,7 @@ function findDoubleSwap(
   byPosition: Map<PositionId, OptimizerPlayer[]>,
   locked: Set<number>,
   currentScore: number,
-  constraints: {
-    mustStart: Set<number>;
-    mustBench: Set<number>;
-    formation?: string | null;
-  },
+  constraints: XiSearchConstraints,
 ) {
   const squad = working.snapshot();
   const shortlist = (position: PositionId) =>
@@ -378,7 +384,13 @@ export function optimizeSquad(
   }
   const formation = options.formation ?? null;
   const formationShape = parseFormation(formation);
-  const constraints = { mustStart, mustBench, formation };
+  const chip = options.chip ?? null;
+  const constraints: XiSearchConstraints = {
+    mustStart,
+    mustBench,
+    formation,
+    chip,
+  };
   const restarts = options.restarts ?? MODEL.optimiserRestarts;
   const warnings: string[] = [];
 
