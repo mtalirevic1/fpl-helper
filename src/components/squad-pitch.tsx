@@ -61,7 +61,7 @@ function PlayerCard({
   return (
     <div
       className={cx(
-        "flex w-[8.5rem] flex-col rounded-xl border bg-surface/90 px-2 py-2 text-center shadow-sm transition-colors",
+        "flex w-[6.75rem] flex-col rounded-xl border bg-surface/90 px-1.5 py-1.5 text-center shadow-sm transition-colors sm:w-[8.5rem] sm:px-2 sm:py-2",
         replacing
           ? "border-cyan/60 ring-1 ring-cyan/40"
           : locked
@@ -206,16 +206,16 @@ export function SquadPitch({
 
   return (
     <div>
-      <div className="rounded-2xl border border-line bg-gradient-to-b from-emerald-950/40 to-surface/40 p-4">
+      <div className="overflow-x-auto rounded-2xl border border-line bg-gradient-to-b from-emerald-950/40 to-surface/40 p-2 sm:p-4">
         {(onToggleLock || onReplace) && (
           <p className="mb-3 text-center text-[11px] text-ink-dim">
             Lock keeps a player in that XI or bench spot. Replace swaps them for
             another player in the same position.
           </p>
         )}
-        <div className="space-y-4">
+        <div className="space-y-2 sm:space-y-4">
           {rows.map((row, index) => (
-            <div key={index} className="flex flex-wrap justify-center gap-2">
+            <div key={index} className="flex flex-wrap justify-center gap-1 sm:gap-2">
               {row.map((player) => (
                 <PlayerCard
                   key={player.id}

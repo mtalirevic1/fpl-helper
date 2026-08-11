@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { CopyButtons } from "@/components/copy-buttons";
 import {
   BudgetAdapter,
   OptimizerControls,
@@ -23,7 +24,7 @@ import { MODEL } from "@/lib/model/config";
 import { buildProjections } from "@/lib/model/projections";
 import { buildCandidates } from "@/lib/optimizer/candidates";
 import { optimizeSquad } from "@/lib/optimizer/squad";
-import { pageMetadata } from "@/lib/site";
+import { absoluteUrl, pageMetadata } from "@/lib/site";
 import { toPlayerRow } from "@/lib/view/rows";
 
 export const revalidate = 300;
@@ -85,6 +86,7 @@ export default async function OptimizerPage({
     ban?: string;
     include?: string;
     includeRole?: string;
+    prior?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -98,6 +100,7 @@ export default async function OptimizerPage({
   const horizon = chip === "freehit" ? 1 : requestedHorizon;
   const budget = Math.max(600, Number(params.budget) || SQUAD.budgetTenths);
   const minStart = Math.min(0.9, Math.max(0, Number(params.minStart) || 0.25));
+  const priorScale = Number(params.prior);
   const formationParam = params.formation?.trim() || "auto";
   const formation =
     formationParam === "auto" || parseFormation(formationParam)
@@ -119,7 +122,9 @@ export default async function OptimizerPage({
   const searchLocked = [...new Set([...locked, ...included])];
 
   const [projections, bootstrap] = await Promise.all([
-    buildProjections(horizon),
+    buildProjections(horizon, {
+      priorScale: Number.isFinite(priorScale) ? priorScale : undefined,
+    }),
     getBootstrap(),
   ]);
   const candidates = buildCandidates(projections.players, {
@@ -251,6 +256,24 @@ export default async function OptimizerPage({
         </div>
       ) : (
         <>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <CopyButtons
+              link={absoluteUrl(
+                `/optimizer?${new URLSearchParams(
+                  Object.entries(params)
+                    .filter(([, value]) => value !== undefined)
+                    .map(([key, value]) => [key, String(value)]),
+                ).toString()}`,
+              )}
+              squadText={[
+                `FPL Edge squad · GW${projections.horizon.from}–${projections.horizon.to}`,
+                `XI: ${startingXi.map((p) => p.name).join(", ")}`,
+                `Bench: ${bench.map((p) => p.name).join(", ")}`,
+                `Bank: ${money(solution.inTheBank)} · ${points(solution.startingXp)} xP XI`,
+              ].join("\n")}
+            />
+          </div>
+
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Stat
               label={

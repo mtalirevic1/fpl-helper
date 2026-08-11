@@ -36,10 +36,43 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "daily",
       priority: 0.7,
     },
+    {
+      url: absoluteUrl("/live"),
+      lastModified,
+      changeFrequency: "hourly",
+      priority: 0.7,
+    },
+    {
+      url: absoluteUrl("/leagues"),
+      lastModified,
+      changeFrequency: "daily",
+      priority: 0.5,
+    },
+    {
+      url: absoluteUrl("/accuracy"),
+      lastModified,
+      changeFrequency: "weekly",
+      priority: 0.4,
+    },
   ];
 
   try {
     const projections = await buildProjections(1);
+    const event = projections.season.targetEvent;
+    routes.push(
+      {
+        url: absoluteUrl(`/gw/${event}/captains`),
+        lastModified,
+        changeFrequency: "hourly",
+        priority: 0.8,
+      },
+      {
+        url: absoluteUrl(`/gw/${event}/transfers`),
+        lastModified,
+        changeFrequency: "hourly",
+        priority: 0.8,
+      },
+    );
     for (const player of projections.players) {
       routes.push({
         url: absoluteUrl(`/players/${player.id}`),

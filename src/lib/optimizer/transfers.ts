@@ -31,6 +31,69 @@ export interface TransferSuggestion {
   netGain: number;
   bankAfter: number;
   formationAfter: string;
+  /** One-line explanation for the UI. */
+  reason: string;
+}
+
+export interface HorizonPlanStep {
+  event: number;
+  moves: TransferMove[];
+  hits: number;
+  pointsHit: number;
+  netGain: number;
+  bankAfter: number;
+  freeTransfersAfter: number;
+  cumulativeNet: number;
+  reason: string;
+}
+
+export interface HorizonPlan {
+  steps: HorizonPlanStep[];
+  cumulativeNet: number;
+}
+
+/** Apply transfer moves to an owned squad, updating bank and sell prices. */
+export function applyTransferMoves(
+  owned: OwnedPlayer[],
+  moves: TransferMove[],
+  bank: number,
+): { owned: OwnedPlayer[]; bank: number } {
+  let nextBank = bank;
+  let nextOwned = [...owned];
+  for (const move of moves) {
+    const outgoing = nextOwned.find((entry) => entry.id === move.out.id);
+    const sell = outgoing?.sellingPrice ?? move.out.price;
+    nextBank += sell - move.in.price;
+    nextOwned = nextOwned
+      .filter((entry) => entry.id !== move.out.id)
+      .concat({
+        id: move.in.id,
+        sellingPrice: move.in.price,
+        purchasePrice: move.in.price,
+        isCaptain: false,
+        isViceCaptain: false,
+      });
+  }
+  return { owned: nextOwned, bank: nextBank };
+}
+
+function suggestionReason(
+  suggestion: Omit<TransferSuggestion, "reason">,
+  horizonWeeks: number,
+): string {
+  const swaps = suggestion.moves
+    .map((move) => `${move.out.name} → ${move.in.name}`)
+    .join(", ");
+  const hit =
+    suggestion.pointsHit > 0 ? ` after −${suggestion.pointsHit}` : "";
+  const sign = suggestion.netGain >= 0 ? "+" : "";
+  return `${swaps}: ${sign}${suggestion.netGain.toFixed(1)} xP over ${horizonWeeks} GW${hit}.`;
+}
+
+function nextFreeTransfers(current: number, transfersMade: number): number {
+  const freeUsed = Math.min(current, transfersMade);
+  const unused = current - freeUsed;
+  return Math.min(TRANSFERS.maxBanked, unused + TRANSFERS.freePerGameweek);
 }
 
 export interface SquadAnalysis {
@@ -151,6 +214,8 @@ export interface TransferPlanOptions {
   /** How many suggestions to return. */
   limit?: number;
   maxPerClub?: number;
+  /** Horizon length used only for reason copy. */
+  horizonWeeks?: number;
 }
 
 /**
@@ -191,12 +256,13 @@ export function planTransfers(
   const hitCost = (transfers: number) =>
     Math.max(0, transfers - options.freeTransfers) * TRANSFERS.pointsHit;
 
+  const horizonWeeks = options.horizonWeeks ?? MODEL.defaultHorizon;
   const evaluate = (moves: TransferMove[]): TransferSuggestion => {
     const after = scoreWithMoves(squad, moves);
     const spend = moves.reduce((total, move) => total - move.cashDelta, 0);
     const hits = Math.max(0, moves.length - options.freeTransfers);
     const xpGain = after.score - baseline.score;
-    return {
+    const partial = {
       moves,
       hits,
       pointsHit: hitCost(moves.length),
@@ -205,6 +271,7 @@ export function planTransfers(
       bankAfter: bank - spend,
       formationAfter: after.formation,
     };
+    return { ...partial, reason: suggestionReason(partial, horizonWeeks) };
   };
 
   const singleSuggestions = singles
@@ -267,6 +334,126 @@ export function planTransfers(
     .slice(0, limit);
 
   return { baseline, suggestions: deduped };
+}
+
+export interface HorizonPlanOptions {
+  freeTransfers: number;
+  targetEvent: number;
+  weeks: number;
+  beamWidth?: number;
+  maxPerClub?: number;
+}
+
+/**
+ * Greedy multi-week transfer plan. Each week keeps a beam of partial squads and
+ * optionally takes 0–2 transfers scored on horizon value, banking free transfers
+ * when holding is better than hitting.
+ */
+export function planTransferHorizon(
+  owned: OwnedPlayer[],
+  byId: Map<number, PlayerProjection>,
+  candidates: PlayerProjection[],
+  bank: number,
+  options: HorizonPlanOptions,
+): HorizonPlan {
+  const weeks = Math.max(1, Math.min(MODEL.maxHorizon, options.weeks));
+  const beamWidth = options.beamWidth ?? 8;
+  const maxPerClub = options.maxPerClub ?? SQUAD.maxPerClub;
+
+  type Beam = {
+    owned: OwnedPlayer[];
+    bank: number;
+    freeTransfers: number;
+    cumulativeNet: number;
+    steps: HorizonPlanStep[];
+  };
+
+  let beams: Beam[] = [
+    {
+      owned,
+      bank,
+      freeTransfers: options.freeTransfers,
+      cumulativeNet: 0,
+      steps: [],
+    },
+  ];
+
+  for (let offset = 0; offset < weeks; offset++) {
+    const event = options.targetEvent + offset;
+    const nextBeams: Beam[] = [];
+
+    for (const beam of beams) {
+      const { suggestions } = planTransfers(
+        beam.owned,
+        byId,
+        candidates,
+        beam.bank,
+        {
+          freeTransfers: beam.freeTransfers,
+          maxTransfers: 2,
+          limit: beamWidth,
+          maxPerClub,
+          horizonWeeks: Math.max(1, weeks - offset),
+        },
+      );
+
+      const hold: TransferSuggestion = {
+        moves: [],
+        hits: 0,
+        pointsHit: 0,
+        xpGain: 0,
+        netGain: 0,
+        bankAfter: beam.bank,
+        formationAfter: "",
+        reason: `Hold in GW${event}: bank a free transfer.`,
+      };
+
+      const choices = [hold, ...suggestions.filter((s) => s.netGain > 0.05)];
+
+      for (const choice of choices) {
+        const applied = applyTransferMoves(beam.owned, choice.moves, beam.bank);
+        const freeTransfersAfter = nextFreeTransfers(
+          beam.freeTransfers,
+          choice.moves.length,
+        );
+        const cumulativeNet = round(beam.cumulativeNet + choice.netGain, 2);
+        const step: HorizonPlanStep = {
+          event,
+          moves: choice.moves,
+          hits: choice.hits,
+          pointsHit: choice.pointsHit,
+          netGain: choice.netGain,
+          bankAfter: applied.bank,
+          freeTransfersAfter,
+          cumulativeNet,
+          reason:
+            choice.moves.length === 0
+              ? hold.reason
+              : choice.reason.replace(/over \d+ GW/, `in GW${event}`),
+        };
+        nextBeams.push({
+          owned: applied.owned,
+          bank: applied.bank,
+          freeTransfers: freeTransfersAfter,
+          cumulativeNet,
+          steps: [...beam.steps, step],
+        });
+      }
+    }
+
+    nextBeams.sort((a, b) => b.cumulativeNet - a.cumulativeNet);
+    beams = nextBeams.slice(0, beamWidth);
+  }
+
+  const best = beams[0] ?? {
+    owned,
+    bank,
+    freeTransfers: options.freeTransfers,
+    cumulativeNet: 0,
+    steps: [],
+  };
+
+  return { steps: best.steps, cumulativeNet: best.cumulativeNet };
 }
 
 /**

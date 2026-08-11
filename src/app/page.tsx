@@ -1,24 +1,32 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 
+import { ChipCalendar } from "@/components/chip-calendar";
 import { DeadlineCountdown } from "@/components/deadline";
 import { FixtureStrip } from "@/components/fixture-strip";
+import { OpenMyTeamLink } from "@/components/open-my-team-link";
 import {
   Badge,
   Card,
   cx,
+  EmptyState,
   Meter,
   PageHeader,
   PositionBadge,
   Stat,
 } from "@/components/ui";
 import { money, percent, points, ukDateTime } from "@/lib/format";
+import { buildDgwCalendar } from "@/lib/fpl/dgw-calendar";
 import { POSITION_NAME, type PositionId, SEASON } from "@/lib/fpl/rules";
+import { chipAvailability } from "@/lib/fpl/season";
+import { MODEL } from "@/lib/model/config";
 import {
   buildProjections,
   type PlayerProjection,
   type PriceTrend,
 } from "@/lib/model/projections";
+import { nextPriceChangeHeuristic } from "@/lib/price-deadline";
+import { buildRiskDesk } from "@/lib/risk-desk";
 import { pageMetadata } from "@/lib/site";
 
 export const revalidate = 300;
@@ -104,8 +112,22 @@ function TopPicks({
 }
 
 export default async function DashboardPage() {
-  const projections = await buildProjections();
-  const { season, players, horizon, bootstrap } = projections;
+  let projections;
+  try {
+    projections = await buildProjections();
+  } catch {
+    return (
+      <>
+        <PageHeader title="Dashboard" />
+        <EmptyState title="FPL API unavailable">
+          Live Fantasy Premier League data could not be loaded. Refresh in a
+          minute — the public API is sometimes briefly down.
+        </EmptyState>
+      </>
+    );
+  }
+
+  const { season, players, horizon, bootstrap, fixtures } = projections;
 
   const target = bootstrap.events.find(
     (event) => event.id === season.targetEvent,
@@ -139,10 +161,32 @@ export default async function DashboardPage() {
     .sort((a, b) => a.netTransfersEvent - b.netTransfersEvent)
     .slice(0, 6);
 
+  const likelyTonight = [...players]
+    .filter(
+      (player) =>
+        player.priceTrend === "very-likely-rise" ||
+        player.priceTrend === "very-likely-fall",
+    )
+    .sort(
+      (a, b) => Math.abs(b.netTransfersEvent) - Math.abs(a.netTransfersEvent),
+    )
+    .slice(0, 8);
+
   const differentials = [...playable]
     .filter((player) => player.selectedByPercent < 8 && player.xpHorizon > 12)
     .sort((a, b) => b.xpHorizon - a.xpHorizon)
     .slice(0, 6);
+
+  const riskDesk = buildRiskDesk(players, 8);
+  const calendar = buildDgwCalendar(
+    bootstrap,
+    fixtures,
+    horizon.from,
+    Math.min(horizon.to, horizon.from + 5),
+    chipAvailability(bootstrap, []),
+  );
+  const priceWindow = nextPriceChangeHeuristic();
+  const { likely, veryLikely } = MODEL.priceShareThresholds;
 
   return (
     <>
@@ -153,14 +197,28 @@ export default async function DashboardPage() {
             ? `The ${SEASON} season has not started, so every projection is built from ${projections.baselineSeason} data, this season's prices and the published fixture list. It will start using live results automatically once matches begin.`
             : `Projections blend ${season.finishedEvents} completed gameweeks of ${SEASON} data with ${projections.baselineSeason} as a prior, and update as results come in.`
         }
-      >
-        {season.targetDeadline && (
-          <DeadlineCountdown
-            deadline={season.targetDeadline}
-            label={`Deadline · ${ukDateTime(target?.deadline_time ?? null)}`}
-          />
+      />
+
+      <div className="mb-4 grid gap-4 sm:grid-cols-2">
+        {season.targetDeadline ? (
+          <div className="rounded-2xl border border-line bg-surface/80 p-4">
+            <DeadlineCountdown
+              deadline={season.targetDeadline}
+              label={`Deadline · ${ukDateTime(target?.deadline_time ?? null)}`}
+              align="start"
+            />
+          </div>
+        ) : (
+          <div />
         )}
-      </PageHeader>
+        <div className="rounded-2xl border border-line bg-surface/80 p-4">
+          <DeadlineCountdown
+            deadline={priceWindow}
+            label="Price change · ~01:30 UK (approx.)"
+            align="start"
+          />
+        </div>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat
@@ -243,10 +301,14 @@ export default async function DashboardPage() {
         ))}
       </div>
 
+      <div className="mt-4">
+        <ChipCalendar profiles={calendar} />
+      </div>
+
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <Card
           title="Price watch"
-          subtitle="Net transfers this gameweek, the input FPL's own price predictor uses."
+          subtitle={`Net-transfer share thresholds: likely ±${(likely * 100).toFixed(1)}%, very likely ±${(veryLikely * 100).toFixed(1)}% of all managers.`}
           className="lg:col-span-2"
         >
           <div className="grid gap-6 sm:grid-cols-2">
@@ -263,10 +325,17 @@ export default async function DashboardPage() {
               <PriceList players={fallers} />
             </div>
           </div>
+          <div className="mt-6">
+            <h3 className="mb-2 text-xs font-semibold tracking-wider text-ink-dim uppercase">
+              Likely tonight
+            </h3>
+            <PriceList players={likelyTonight} />
+          </div>
           <p className="mt-4 text-xs text-ink-dim">
-            FPL does not publish its price-change algorithm. This ranks daily net
-            transfer momentum as a share of all managers, which is the input the
-            official predictor is built on.
+            FPL does not publish its price-change algorithm or an official price
+            deadline. The countdown above is a typical ~01:30 UK window, labelled
+            approximate. Rising targets vs falling owned alternatives: transfer
+            now if you need the riser; wait if you can bank the faller first.
           </p>
         </Card>
 
@@ -294,6 +363,70 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <Card
+          title="Risk desk"
+          subtitle="News and availability flags ranked by ownership × impact."
+        >
+          {!riskDesk.length ? (
+            <p className="text-sm text-ink-dim">No flagged players right now.</p>
+          ) : (
+            <ul className="divide-y divide-line">
+              {riskDesk.map((item) => (
+                <li key={item.id} className="py-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <Link
+                      href={`/players/${item.id}`}
+                      className="font-medium hover:text-accent"
+                    >
+                      {item.name}
+                      <span className="ml-1.5 text-xs text-ink-dim">
+                        {item.teamShort}
+                      </span>
+                    </Link>
+                    <span className="text-xs tabular-nums text-ink-dim">
+                      {item.selectedByPercent.toFixed(1)}%
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-ink-muted line-clamp-2">
+                    {item.news}
+                    {item.expectedReturn
+                      ? ` · back ${item.expectedReturn}`
+                      : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+        <Card title="Live & leagues">
+          <p className="text-sm text-ink-muted">
+            Track live points during the gameweek, or paste a classic league ID
+            to rank rivals by FPL score and model xP.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link
+              href="/live"
+              className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-brand hover:bg-accent-dim"
+            >
+              Live points
+            </Link>
+            <Link
+              href="/leagues"
+              className="rounded-lg border border-line-strong px-4 py-2 text-sm font-semibold hover:border-accent hover:text-accent"
+            >
+              Mini-leagues
+            </Link>
+            <Link
+              href={`/gw/${season.targetEvent}/captains`}
+              className="rounded-lg border border-line-strong px-4 py-2 text-sm font-semibold hover:border-accent hover:text-accent"
+            >
+              GW{season.targetEvent} captains
+            </Link>
+          </div>
+        </Card>
+      </div>
+
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         <Card title="Build a squad from scratch">
           <p className="text-sm text-ink-muted">
@@ -312,13 +445,11 @@ export default async function DashboardPage() {
           <p className="text-sm text-ink-muted">
             Enter your FPL team ID and get transfer suggestions ranked by points
             gained after any hit, plus captain, bench order and chip advice.
+            Team ID is stored locally as <code>fpl-edge:team-id</code>.
           </p>
-          <Link
-            href="/my-team"
-            className="mt-4 inline-flex rounded-lg border border-line-strong px-4 py-2 text-sm font-semibold hover:border-accent hover:text-accent"
-          >
-            Analyse my team
-          </Link>
+          <OpenMyTeamLink className="mt-4 inline-flex rounded-lg border border-line-strong px-4 py-2 text-sm font-semibold hover:border-accent hover:text-accent">
+            Open my team
+          </OpenMyTeamLink>
         </Card>
       </div>
     </>

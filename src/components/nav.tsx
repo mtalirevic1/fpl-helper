@@ -12,6 +12,8 @@ const LINKS = [
   { href: "/fixtures", label: "Fixtures" },
   { href: "/optimizer", label: "Squad builder" },
   { href: "/my-team", label: "My team" },
+  { href: "/live", label: "Live" },
+  { href: "/leagues", label: "Leagues" },
 ] as const;
 
 export function Nav() {
@@ -19,7 +21,7 @@ export function Nav() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-canvas/85 backdrop-blur">
-      <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-6">
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-6 xl:max-w-[90rem] 2xl:max-w-[100rem]">
         <Link href="/" className="flex items-center gap-2">
           <Image
             src="/logo.png"

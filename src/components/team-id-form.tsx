@@ -3,8 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useTransition } from "react";
 
-const STORAGE_KEY = "fpl-edge:team-id";
-const LEGACY_STORAGE_KEY = "fpl-helper:team-id";
+import {
+  getStoredTeamId,
+  setStoredTeamId,
+} from "@/lib/client-storage";
 
 /**
  * Takes a public FPL team ID. No login is involved — the ID is the number in the
@@ -18,15 +20,12 @@ export function TeamIdForm({ current }: { current?: number }) {
 
   useEffect(() => {
     if (current) {
-      window.localStorage.setItem(STORAGE_KEY, String(current));
+      setStoredTeamId(current);
       return;
     }
-    const saved =
-      window.localStorage.getItem(STORAGE_KEY) ??
-      window.localStorage.getItem(LEGACY_STORAGE_KEY);
+    const saved = getStoredTeamId();
     if (saved && input.current && !input.current.value) {
-      input.current.value = saved;
-      window.localStorage.setItem(STORAGE_KEY, saved);
+      input.current.value = String(saved);
     }
   }, [current]);
 
@@ -34,6 +33,7 @@ export function TeamIdForm({ current }: { current?: number }) {
     event.preventDefault();
     const id = Number(input.current?.value.trim());
     if (!Number.isFinite(id) || id <= 0) return;
+    setStoredTeamId(id);
     startTransition(() => router.push(`/my-team?id=${id}`));
   };
 

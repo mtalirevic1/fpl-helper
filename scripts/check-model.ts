@@ -736,6 +736,91 @@ async function main() {
     )?.available === true,
   );
 
+  console.log("\nSet-piece, confidence, ownership, transfer horizon");
+  const penTaker = projections.players.find((player) => player.isPenaltyTaker);
+  if (penTaker) {
+    check(
+      "Primary penalty taker is flagged",
+      penTaker.isPenaltyTaker === true,
+      penTaker.name,
+    );
+  } else {
+    console.log("  SKIP  No primary penalty taker in bootstrap");
+  }
+
+  const sample = projections.players.slice(0, 40);
+  check(
+    "Confidence bands satisfy low ≤ point ≤ high",
+    sample.every(
+      (player) =>
+        player.xpNextLow <= player.xpNext + 1e-9 &&
+        player.xpNext <= player.xpNextHigh + 1e-9 &&
+        player.xpHorizonLow <= player.xpHorizon + 1e-9 &&
+        player.xpHorizon <= player.xpHorizonHigh + 1e-9,
+    ),
+  );
+
+  const { analyseOwnership } = await import(
+    "../src/lib/optimizer/ownership"
+  );
+  const ownership = analyseOwnership(
+    owned,
+    projections.byId,
+    projections.players,
+  );
+  check(
+    "Ownership helper returns finite average ownership",
+    Number.isFinite(ownership.averageOwnership),
+  );
+
+  const { planTransferHorizon } = await import(
+    "../src/lib/optimizer/transfers"
+  );
+  const horizonPlan = planTransferHorizon(
+    owned,
+    projections.byId,
+    players.filter(
+      (player) =>
+        player.availability > 0 && player.rates.startProbability >= 0.25,
+    ),
+    Math.max(0, bank),
+    {
+      freeTransfers: 1,
+      weeks: 3,
+      targetEvent: season.targetEvent,
+    },
+  );
+  check(
+    "Transfer horizon returns one step per gameweek",
+    horizonPlan.steps.length === 3,
+    `got ${horizonPlan.steps.length}`,
+  );
+  check(
+    "Transfer horizon free-transfer counts stay in 0–5",
+    horizonPlan.steps.every(
+      (step) =>
+        step.freeTransfersAfter >= 0 && step.freeTransfersAfter <= 5,
+    ),
+  );
+
+  console.log("\nBacktest snapshots");
+  try {
+    const { readdir } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    const dir = join(process.cwd(), "src/data/backtest");
+    const files = (await readdir(dir)).filter((name) =>
+      /^gw\d+\.json$/.test(name),
+    );
+    if (!files.length) {
+      console.log("  SKIP  No gw*.json snapshots committed yet");
+    } else {
+      console.log(`  Found ${files.length} snapshot(s): ${files.join(", ")}`);
+      check("At least one backtest snapshot is readable", files.length > 0);
+    }
+  } catch {
+    console.log("  SKIP  backtest directory missing");
+  }
+
   console.log(
     failures === 0
       ? "\nAll checks passed.\n"

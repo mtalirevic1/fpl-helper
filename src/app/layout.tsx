@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
 import { Nav } from "@/components/nav";
+import { PwaRegister } from "@/components/pwa-register";
 import { SEASON } from "@/lib/fpl/rules";
 import { rootMetadata, siteJsonLd, SITE_NAME } from "@/lib/site";
 
@@ -36,12 +37,13 @@ export default function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
+        <PwaRegister />
         <Nav />
-        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">
+        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 xl:max-w-[90rem] 2xl:max-w-[100rem]">
           {children}
         </main>
         <footer className="border-t border-line px-4 py-6 text-xs text-ink-dim sm:px-6">
-          <div className="mx-auto max-w-7xl space-y-1">
+          <div className="mx-auto max-w-7xl space-y-1 xl:max-w-[90rem] 2xl:max-w-[100rem]">
             <p>
               {SITE_NAME} is built on the public Fantasy Premier League API. Not
               affiliated with the Premier League. Scoring and squad rules follow

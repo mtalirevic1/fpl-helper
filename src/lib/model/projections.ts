@@ -79,8 +79,16 @@ export interface PlayerProjection {
   dataSource: PlayerRates["source"];
   /** Expected points in the gameweek recommendations are being built for. */
   xpNext: number;
+  xpNextLow: number;
+  xpNextHigh: number;
   /** Expected points summed over the whole horizon. */
   xpHorizon: number;
+  xpHorizonLow: number;
+  xpHorizonHigh: number;
+  /** True when FPL lists this player first for penalties. */
+  isPenaltyTaker: boolean;
+  isDirectFreeKickTaker: boolean;
+  isCornerTaker: boolean;
   /** Expected points per fixture over the horizon. */
   xpPerFixture: number;
   /** Expected points over the horizon per £1.0m of price. */
@@ -129,11 +137,46 @@ const num = (value: string | null | undefined): number => {
 function priceTrendOf(element: FplElement, totalPlayers: number): PriceTrend {
   const net = element.transfers_in_event - element.transfers_out_event;
   const share = safeDivide(net, totalPlayers);
-  if (share > 0.012) return "very-likely-rise";
-  if (share > 0.004) return "likely-rise";
-  if (share < -0.012) return "very-likely-fall";
-  if (share < -0.004) return "likely-fall";
+  const { likely, veryLikely } = MODEL.priceShareThresholds;
+  if (share > veryLikely) return "very-likely-rise";
+  if (share > likely) return "likely-rise";
+  if (share < -veryLikely) return "very-likely-fall";
+  if (share < -likely) return "likely-fall";
   return "stable";
+}
+
+function applySetPieceRates(
+  element: FplElement,
+  rates: PlayerRates,
+): PlayerRates {
+  let xG90 = rates.xG90;
+  let xA90 = rates.xA90;
+  if (element.penalties_order === 1) {
+    xG90 *= MODEL.setPiece.penaltyXgMult;
+  }
+  if (element.direct_freekicks_order === 1) {
+    xG90 *= MODEL.setPiece.directFreeKickXgMult;
+  }
+  if (element.corners_and_indirect_freekicks_order === 1) {
+    xA90 *= MODEL.setPiece.cornerXaMult;
+  }
+  return { ...rates, xG90, xA90 };
+}
+
+function confidenceWidth(rates: PlayerRates, startProbability: number): number {
+  const base =
+    rates.source === "prior"
+      ? MODEL.confidence.priorWidth
+      : rates.source === "blended" || rates.source === "previous"
+        ? MODEL.confidence.blendedWidth
+        : MODEL.confidence.currentWidth;
+  const minutesExtra =
+    rates.sampleMinutes < MODEL.confidence.lowMinutesThreshold
+      ? MODEL.confidence.lowMinutesExtra
+      : 0;
+  const startExtra =
+    startProbability < 0.55 ? MODEL.confidence.lowStartExtra : 0;
+  return Math.min(0.55, base + minutesExtra + startExtra);
 }
 
 /**
@@ -144,8 +187,17 @@ function priceTrendOf(element: FplElement, totalPlayers: number): PriceTrend {
  * fall out naturally because projections iterate a team's actual fixture list
  * rather than assuming one match per gameweek.
  */
+export interface ProjectionOptions {
+  /**
+   * Scales prior weight in rate blending. Clamped to 0.5–2. Advanced URL
+   * `?prior=` on Players / Optimizer.
+   */
+  priorScale?: number;
+}
+
 export async function buildProjections(
   horizonInput: number = MODEL.defaultHorizon,
+  options: ProjectionOptions = {},
 ): Promise<ProjectionSet> {
   const [bootstrap, fixtures] = await Promise.all([
     getBootstrap(),
@@ -164,10 +216,16 @@ export async function buildProjections(
   const teamFixtures = fixturesByTeam(fixtures, from, to);
   const teamsById = new Map(bootstrap.teams.map((t) => [t.id, t]));
 
+  const priorScale = Math.min(
+    2,
+    Math.max(0.5, options.priorScale ?? 1),
+  );
+
   const context: RateContext = {
     bootstrapIsPreviousSeason: season.isPreseason,
     priors: buildPositionPriors(bootstrap, season.isPreseason),
     matchesPlayed: season.matchesPlayed,
+    priorMinutesScale: priorScale,
   };
 
   const adjustmentIndex = buildAdjustmentIndex(bootstrap, MANUAL_ADJUSTMENTS);
@@ -202,7 +260,7 @@ export async function buildProjections(
     const team = teamsById.get(element.team);
     if (!team) continue;
 
-    const rates = playerRates(element, context);
+    const rates = applySetPieceRates(element, playerRates(element, context));
     const bonusFactor = bpsRuleChangeFactor(rates);
 
     const playerAdjustments = adjustmentIndex.byElement.get(element.id) ?? [];
@@ -257,6 +315,9 @@ export async function buildProjections(
     }
 
     const xpHorizon = breakdownHorizon.total;
+    const xpNext = breakdownNext.total;
+    const startProb = breakdownNext.startProbability;
+    const width = confidenceWidth(rates, startProb);
 
     players.push({
       id: element.id,
@@ -280,8 +341,15 @@ export async function buildProjections(
       starts: element.starts,
       rates,
       dataSource: rates.source,
-      xpNext: round(breakdownNext.total, 2),
+      xpNext: round(xpNext, 2),
+      xpNextLow: round(xpNext * (1 - width), 2),
+      xpNextHigh: round(xpNext * (1 + width), 2),
       xpHorizon: round(xpHorizon, 2),
+      xpHorizonLow: round(xpHorizon * (1 - width), 2),
+      xpHorizonHigh: round(xpHorizon * (1 + width), 2),
+      isPenaltyTaker: element.penalties_order === 1,
+      isDirectFreeKickTaker: element.direct_freekicks_order === 1,
+      isCornerTaker: element.corners_and_indirect_freekicks_order === 1,
       xpPerFixture: round(
         safeDivide(xpHorizon, fixtureProjections.length),
         2,

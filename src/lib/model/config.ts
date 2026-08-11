@@ -138,4 +138,33 @@ export const MODEL = {
     /** Suggest a Wildcard when a fresh squad beats the current one by this much. */
     wildcard: 15,
   },
+
+  /**
+   * Mild set-piece uplifts when FPL lists the player first in the taking order.
+   * These are small on purpose — order is noisy and not the same as "always takes".
+   */
+  setPiece: {
+    penaltyXgMult: 1.12,
+    directFreeKickXgMult: 1.03,
+    cornerXaMult: 1.02,
+  },
+
+  /**
+   * Half-width of the confidence band around projected points, as a fraction of
+   * the point estimate. Widened for thin samples and uncertain minutes.
+   */
+  confidence: {
+    priorWidth: 0.35,
+    blendedWidth: 0.22,
+    currentWidth: 0.12,
+    lowMinutesExtra: 0.1,
+    lowStartExtra: 0.15,
+    lowMinutesThreshold: 450,
+  },
+
+  /** Net-transfer share of all managers used by the price-watch heuristic. */
+  priceShareThresholds: {
+    likely: 0.004,
+    veryLikely: 0.012,
+  },
 } as const;

@@ -242,7 +242,7 @@ export function OptimizerPitch({
           role="dialog"
           aria-modal="true"
           aria-label={`Replace ${replacing.player.name}`}
-          className="rounded-2xl border border-cyan/40 bg-surface-2/90 p-4 shadow-lg"
+          className="sticky bottom-2 z-30 rounded-2xl border border-cyan/40 bg-surface-2/95 p-4 shadow-lg backdrop-blur sm:bottom-4"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>

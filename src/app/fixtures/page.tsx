@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 
+import { ChipCalendar } from "@/components/chip-calendar";
 import { HorizonPicker } from "@/components/horizon-picker";
 import { Card, cx, DifficultyPill, PageHeader } from "@/components/ui";
 import { percent, ukDateTime } from "@/lib/format";
-import { fixturesByTeam, fixtureView } from "@/lib/fpl/season";
+import { buildDgwCalendar } from "@/lib/fpl/dgw-calendar";
+import { chipAvailability, fixturesByTeam, fixtureView } from "@/lib/fpl/season";
 import { buildProjections } from "@/lib/model/projections";
 import { pageMetadata } from "@/lib/site";
 
@@ -73,6 +75,14 @@ export default async function FixturesPage({
     );
   const teamsById = new Map(bootstrap.teams.map((team) => [team.id, team]));
 
+  const calendar = buildDgwCalendar(
+    bootstrap,
+    fixtures,
+    horizon.from,
+    horizon.to,
+    chipAvailability(bootstrap, []),
+  );
+
   return (
     <>
       <PageHeader
@@ -81,6 +91,10 @@ export default async function FixturesPage({
       >
         <HorizonPicker horizon={events.length} />
       </PageHeader>
+
+      <div className="mb-4">
+        <ChipCalendar profiles={calendar} />
+      </div>
 
       <Card
         title="Fixture difficulty by club"

@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { CopyButtons } from "@/components/copy-buttons";
+import { HorizonPicker } from "@/components/horizon-picker";
 import { SquadPitch } from "@/components/squad-pitch";
 import { TeamIdForm } from "@/components/team-id-form";
+import { TransferPreviewButtons } from "@/components/transfer-preview-buttons";
 import {
   Badge,
   Card,
@@ -19,14 +22,17 @@ import { MODEL } from "@/lib/model/config";
 import { buildProjections } from "@/lib/model/projections";
 import { buildCandidates } from "@/lib/optimizer/candidates";
 import { captaincyRanking, recommendChips } from "@/lib/optimizer/chips";
+import { analyseOwnership } from "@/lib/optimizer/ownership";
 import { optimizeSquad } from "@/lib/optimizer/squad";
 import {
   analyseSquad,
+  applyTransferMoves,
   freeTransfersFor,
   type OwnedPlayer,
+  planTransferHorizon,
   planTransfers,
 } from "@/lib/optimizer/transfers";
-import { pageMetadata } from "@/lib/site";
+import { absoluteUrl, pageMetadata } from "@/lib/site";
 import { toPlayerRow } from "@/lib/view/rows";
 
 export const revalidate = 60;
@@ -38,10 +44,29 @@ export const metadata: Metadata = pageMetadata({
   path: "/my-team",
 });
 
+function parsePreview(
+  raw: string | undefined,
+): Array<{ out: number; in: number }> {
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((part) => {
+      const [outRaw, inRaw] = part.split(":");
+      return { out: Number(outRaw), in: Number(inRaw) };
+    })
+    .filter(
+      (move) =>
+        Number.isFinite(move.out) &&
+        Number.isFinite(move.in) &&
+        move.out > 0 &&
+        move.in > 0,
+    );
+}
+
 export default async function MyTeamPage({
   searchParams,
 }: {
-  searchParams: Promise<{ id?: string; horizon?: string }>;
+  searchParams: Promise<{ id?: string; horizon?: string; preview?: string }>;
 }) {
   const params = await searchParams;
   const entryId = Number(params.id);
@@ -49,6 +74,7 @@ export default async function MyTeamPage({
     MODEL.maxHorizon,
     Math.max(1, Number(params.horizon) || MODEL.defaultHorizon),
   );
+  const previewMoves = parsePreview(params.preview);
 
   if (!Number.isFinite(entryId) || entryId <= 0) {
     return (
@@ -103,6 +129,8 @@ export default async function MyTeamPage({
     ? await getEntryPicks(entryId, picksEvent).catch(() => null)
     : null;
 
+  const classicLeagues = entry.leagues?.classic?.slice(0, 6) ?? [];
+
   const header = (
     <PageHeader
       title={entry.name}
@@ -123,7 +151,10 @@ export default async function MyTeamPage({
         </>
       }
     >
-      <TeamIdForm current={entryId} />
+      <div className="flex flex-col items-end gap-2">
+        <HorizonPicker horizon={horizon} />
+        <TeamIdForm current={entryId} />
+      </div>
     </PageHeader>
   );
 
@@ -143,7 +174,7 @@ export default async function MyTeamPage({
     );
   }
 
-  const owned: OwnedPlayer[] = picks.picks.map((pick) => {
+  const baseOwned: OwnedPlayer[] = picks.picks.map((pick) => {
     const player = byId.get(pick.element);
     return {
       id: pick.element,
@@ -157,22 +188,64 @@ export default async function MyTeamPage({
     };
   });
 
-  const bank = picks.entry_history.bank;
+  const baseBank = picks.entry_history.bank;
   const freeTransfers = history
     ? freeTransfersFor(history.current, season.targetEvent, history.chips)
     : TRANSFERS.freePerGameweek;
 
-  const analysis = analyseSquad(owned, byId, bank);
   const candidates = projections.players.filter(
     (player) => player.availability > 0 && player.rates.startProbability >= 0.25,
   );
+
+  const stagedMoves = previewMoves
+    .map((move) => {
+      const out = byId.get(move.out);
+      const incoming = byId.get(move.in);
+      if (!out || !incoming) return null;
+      return {
+        out,
+        in: incoming,
+        cashDelta:
+          (baseOwned.find((entry) => entry.id === out.id)?.sellingPrice ??
+            out.price) - incoming.price,
+      };
+    })
+    .filter((move): move is NonNullable<typeof move> => Boolean(move));
+
+  const staged =
+    stagedMoves.length > 0
+      ? applyTransferMoves(baseOwned, stagedMoves, baseBank)
+      : { owned: baseOwned, bank: baseBank };
+  const owned = staged.owned;
+  const bank = staged.bank;
+  const previewActive = stagedMoves.length > 0;
+
+  const analysis = analyseSquad(owned, byId, bank);
+  const ownership = analyseOwnership(owned, byId, projections.players);
 
   const { baseline, suggestions } = planTransfers(
     owned,
     byId,
     candidates,
     bank,
-    { freeTransfers, maxTransfers: 2, limit: 8 },
+    {
+      freeTransfers,
+      maxTransfers: 2,
+      limit: 8,
+      horizonWeeks: horizon,
+    },
+  );
+
+  const horizonPlan = planTransferHorizon(
+    baseOwned,
+    byId,
+    candidates,
+    baseBank,
+    {
+      freeTransfers,
+      targetEvent: season.targetEvent,
+      weeks: horizon,
+    },
   );
 
   const squadPlayers = owned
@@ -209,9 +282,62 @@ export default async function MyTeamPage({
     .filter((player): player is NonNullable<typeof player> => Boolean(player))
     .map(toPlayerRow);
 
+  const squadText = [
+    `XI (${analysis.lineup.formation}): ${startingXi.map((p) => p.name).join(", ")}`,
+    `Bench: ${bench.map((p) => p.name).join(", ")}`,
+  ].join("\n");
+
+  const previewKeys = suggestions.slice(0, 5).map((suggestion) => ({
+    key: suggestion.moves.map((move) => `${move.out.id}:${move.in.id}`).join(","),
+    label:
+      suggestion.moves.length === 1
+        ? `Preview ${suggestion.moves[0].in.name}`
+        : `Preview ${suggestion.moves.length} moves`,
+  }));
+
   return (
     <>
       {header}
+
+      {previewActive && (
+        <div className="mb-4 rounded-xl border border-cyan/40 bg-cyan/5 px-4 py-3 text-sm text-cyan">
+          Previewing staged transfers — bank {money(bank)}.{" "}
+          <Link
+            href={`/my-team?id=${entryId}&horizon=${horizon}`}
+            className="underline hover:text-ink"
+          >
+            Clear preview
+          </Link>
+        </div>
+      )}
+
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <CopyButtons
+          link={absoluteUrl(
+            `/my-team?id=${entryId}&horizon=${horizon}`,
+          )}
+          squadText={squadText}
+        />
+        {classicLeagues.length > 0 && (
+          <div className="flex flex-wrap gap-2 text-xs">
+            {classicLeagues.map((league) => (
+              <Link
+                key={league.id}
+                href={`/leagues?league=${league.id}&id=${entryId}`}
+                className="rounded-md border border-line px-2 py-1 text-ink-muted hover:text-accent"
+              >
+                {league.name}
+              </Link>
+            ))}
+          </div>
+        )}
+        <Link
+          href={`/live?id=${entryId}`}
+          className="text-xs text-accent hover:underline"
+        >
+          Live points →
+        </Link>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat
@@ -301,6 +427,64 @@ export default async function MyTeamPage({
                 points this gameweek.
               </p>
             )}
+            {captains[0] && (
+              <p className="mt-2 text-xs text-ink-dim">
+                Captain {captains[0].name}: highest GW{season.targetEvent}{" "}
+                projection in your XI at {points(captains[0].xpNext)}.
+              </p>
+            )}
+          </Card>
+
+          <Card
+            title="Ownership"
+            subtitle="How template your squad looks versus the field."
+          >
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <div className="text-[11px] tracking-wider text-ink-dim uppercase">
+                  Avg ownership
+                </div>
+                <div className="font-semibold tabular-nums">
+                  {ownership.averageOwnership.toFixed(1)}%
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] tracking-wider text-ink-dim uppercase">
+                  Differentials
+                </div>
+                <div className="font-semibold tabular-nums">
+                  {ownership.differentialCount}
+                  <span className="text-xs font-normal text-ink-dim">
+                    {" "}
+                    under 8%
+                  </span>
+                </div>
+              </div>
+            </div>
+            {ownership.missingTemplate.length > 0 && (
+              <div className="mt-3">
+                <div className="text-[11px] tracking-wider text-ink-dim uppercase">
+                  Missing from xP template
+                </div>
+                <ul className="mt-1 space-y-1 text-sm">
+                  {ownership.missingTemplate.slice(0, 4).map((player) => (
+                    <li key={player.id}>
+                      <Link
+                        href={`/players/${player.id}`}
+                        className="hover:text-accent"
+                      >
+                        {player.name}
+                      </Link>
+                      <span className="text-xs text-ink-dim">
+                        {" "}
+                        · {player.selectedByPercent.toFixed(1)}% ·{" "}
+                        {points(player.xpNext)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </Card>
 
           <Card title="Chips" subtitle="Judged against this gameweek.">
@@ -346,9 +530,14 @@ export default async function MyTeamPage({
       <div className="mt-4">
         <Card
           title="Transfer suggestions"
-          subtitle={`Ranked by points gained over GW${projections.horizon.from}–${projections.horizon.to} after paying for any hits. You have ${freeTransfers} free transfer${
+          subtitle={`This week — ranked by points gained over GW${projections.horizon.from}–${projections.horizon.to} after hits. You have ${freeTransfers} free transfer${
             freeTransfers === 1 ? "" : "s"
           }.`}
+          action={
+            previewKeys.length > 0 ? (
+              <TransferPreviewButtons previews={previewKeys} />
+            ) : undefined
+          }
         >
           {suggestions.length === 0 ? (
             <p className="text-sm text-ink-dim">
@@ -396,6 +585,9 @@ export default async function MyTeamPage({
                             </li>
                           ))}
                         </ul>
+                        <p className="mt-1 text-xs text-ink-dim">
+                          {suggestion.reason}
+                        </p>
                       </td>
                       <td className="py-2.5 text-right tabular-nums text-ink-muted">
                         {money(suggestion.bankAfter)} left
@@ -428,6 +620,53 @@ export default async function MyTeamPage({
             equal today&apos;s price — the game gives you back your purchase price
             plus half of any profit, so your real budget may be marginally higher.
           </p>
+        </Card>
+      </div>
+
+      <div className="mt-4">
+        <Card
+          title={`Plan next ${horizon} gameweek${horizon === 1 ? "" : "s"}`}
+          subtitle={`Beam search that banks free transfers when hitting is not worth it. Cumulative net ${signed(horizonPlan.cumulativeNet)}.`}
+        >
+          {horizonPlan.steps.length === 0 ? (
+            <p className="text-sm text-ink-dim">No multi-week plan available.</p>
+          ) : (
+            <ol className="space-y-3">
+              {horizonPlan.steps.map((step) => (
+                <li
+                  key={step.event}
+                  className="rounded-lg border border-line bg-surface-2/40 px-3 py-2 text-sm"
+                >
+                  <div className="flex flex-wrap items-baseline gap-2">
+                    <span className="font-semibold">GW{step.event}</span>
+                    <span className="text-xs text-ink-dim">
+                      FT after {step.freeTransfersAfter} · bank{" "}
+                      {money(step.bankAfter)} · cum {signed(step.cumulativeNet)}
+                    </span>
+                  </div>
+                  {step.moves.length === 0 ? (
+                    <p className="mt-1 text-ink-muted">{step.reason}</p>
+                  ) : (
+                    <ul className="mt-1 space-y-1">
+                      {step.moves.map((move) => (
+                        <li key={`${step.event}-${move.out.id}-${move.in.id}`}>
+                          <span className="text-danger">{move.out.name}</span>
+                          {" → "}
+                          <Link
+                            href={`/players/${move.in.id}`}
+                            className="text-accent hover:underline"
+                          >
+                            {move.in.name}
+                          </Link>
+                        </li>
+                      ))}
+                      <li className="text-xs text-ink-dim">{step.reason}</li>
+                    </ul>
+                  )}
+                </li>
+              ))}
+            </ol>
+          )}
         </Card>
       </div>
 

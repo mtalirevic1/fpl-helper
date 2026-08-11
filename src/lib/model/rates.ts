@@ -177,39 +177,42 @@ function blendRates(
   current: PlayerRates,
   previous: PlayerRates,
   teamMatches: number,
+  priorMinutesScale = 1,
 ): PlayerRates {
+  const ratePrior = MODEL.ratePriorMinutes * priorMinutesScale;
+  const rolePrior = MODEL.rolePriorMatches * priorMinutesScale;
   const blended = { ...current };
   for (const key of RATE_KEYS) {
     blended[key] = shrink(
       current[key],
       current.sampleMinutes,
       previous[key],
-      MODEL.ratePriorMinutes,
+      ratePrior,
     );
   }
   blended.finishing = shrink(
     current.finishing,
     current.sampleMinutes,
     previous.finishing,
-    MODEL.ratePriorMinutes,
+    ratePrior,
   );
   blended.startProbability = shrink(
     current.startProbability,
     teamMatches,
     previous.startProbability,
-    MODEL.rolePriorMatches,
+    rolePrior,
   );
   blended.subProbability = shrink(
     current.subProbability,
     teamMatches,
     previous.subProbability,
-    MODEL.rolePriorMatches,
+    rolePrior,
   );
   blended.minutesPerStart = shrink(
     current.minutesPerStart,
     teamMatches,
     previous.minutesPerStart,
-    MODEL.rolePriorMatches,
+    rolePrior,
   );
   blended.sampleMinutes = current.sampleMinutes + previous.sampleMinutes;
   blended.source = current.sampleMinutes > 0 ? "blended" : "previous";
@@ -361,6 +364,11 @@ export interface RateContext {
   bootstrapIsPreviousSeason: boolean;
   priors: PositionPriors;
   matchesPlayed: Map<number, number>;
+  /**
+   * Scales how many minutes of current-season evidence are needed before the
+   * prior fades. Values above 1 lean harder on last season / peers.
+   */
+  priorMinutesScale?: number;
 }
 
 /**
@@ -405,6 +413,7 @@ export function playerRates(
             ratesFromSeason(currentSeason, position, Math.max(1, teamMatches)),
             previousRates,
             teamMatches,
+            context.priorMinutesScale ?? 1,
           )
         : previousRates;
   } else if (currentSeason && currentSeason.minutes > 0) {

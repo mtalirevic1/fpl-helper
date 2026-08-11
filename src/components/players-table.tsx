@@ -1,13 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { getWatchlist } from "@/lib/client-storage";
 import { money, percent, points, shortDate } from "@/lib/format";
 import type { PositionId } from "@/lib/fpl/rules";
+import type { PriceTrend } from "@/lib/model/projections";
 import type { PlayerRow } from "@/lib/view/rows";
 
 import { Badge, cx, DifficultyPill, FIXTURE_CHIP, PositionBadge } from "./ui";
+import { WatchlistStar } from "./watchlist-star";
 
 type SortKey =
   | "xpHorizon"
@@ -132,10 +135,13 @@ export function PlayersTable({
   rows,
   teams,
   events,
+  myTeamIds = [],
 }: {
   rows: PlayerRow[];
   teams: Array<{ id: number; name: string; shortName: string }>;
   events: number[];
+  /** Element IDs currently in the stored / queried FPL squad. */
+  myTeamIds?: number[];
 }) {
   // FPL prices are in tenths of a million. The ceiling must come from live data
   // so premiums above a hardcoded £15.0m cap (e.g. Haaland at £15.5m) stay
@@ -158,18 +164,46 @@ export function PlayersTable({
   const maxPrice = maxPriceOverride ?? priceCeiling;
   const [hideUnavailable, setHideUnavailable] = useState(true);
   const [minStart, setMinStart] = useState(0);
+  const [maxOwnership, setMaxOwnership] = useState(100);
+  const [priceTrend, setPriceTrend] = useState<"all" | PriceTrend>("all");
+  const [fixtureFilter, setFixtureFilter] = useState<
+    "all" | "blank" | "double"
+  >("all");
+  const [excludeMyTeam, setExcludeMyTeam] = useState(false);
+  const [watchlistOnly, setWatchlistOnly] = useState(false);
+  const [watchlist, setWatchlist] = useState<number[]>([]);
   const [sortKey, setSortKey] = useState<SortKey>("xpHorizon");
   const [ascending, setAscending] = useState(false);
   const [limit, setLimit] = useState(60);
 
+  useEffect(() => {
+    const sync = () => setWatchlist(getWatchlist());
+    sync();
+    window.addEventListener("fpl-edge-watchlist", sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener("fpl-edge-watchlist", sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
+
+  const owned = useMemo(() => new Set(myTeamIds), [myTeamIds]);
+
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
+    const watch = new Set(watchlist);
     const result = rows.filter((row) => {
       if (position !== "all" && row.position !== position) return false;
       if (team !== "all" && row.teamId !== team) return false;
       if (row.price > maxPrice) return false;
       if (hideUnavailable && row.availability <= 0) return false;
       if (row.startProbability < minStart) return false;
+      if (row.selectedByPercent > maxOwnership) return false;
+      if (priceTrend !== "all" && row.priceTrend !== priceTrend) return false;
+      if (fixtureFilter === "blank" && row.fixtureCountNext !== 0) return false;
+      if (fixtureFilter === "double" && row.fixtureCountNext < 2) return false;
+      if (excludeMyTeam && owned.has(row.id)) return false;
+      if (watchlistOnly && !watch.has(row.id)) return false;
       if (term && !`${row.name} ${row.teamShort}`.toLowerCase().includes(term)) {
         return false;
       }
@@ -189,6 +223,13 @@ export function PlayersTable({
     maxPrice,
     hideUnavailable,
     minStart,
+    maxOwnership,
+    priceTrend,
+    fixtureFilter,
+    excludeMyTeam,
+    watchlistOnly,
+    watchlist,
+    owned,
     sortKey,
     ascending,
   ]);
@@ -296,6 +337,60 @@ export function PlayersTable({
           />
         </label>
 
+        <label className="flex flex-col gap-1">
+          <span className="text-[11px] tracking-wider text-ink-dim uppercase">
+            Max ownership {maxOwnership}%
+          </span>
+          <input
+            type="range"
+            min={1}
+            max={100}
+            step={1}
+            value={maxOwnership}
+            onChange={(event) => setMaxOwnership(Number(event.target.value))}
+            className="w-36 accent-[color:var(--color-accent)]"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[11px] tracking-wider text-ink-dim uppercase">
+            Price trend
+          </span>
+          <select
+            value={priceTrend}
+            onChange={(event) =>
+              setPriceTrend(event.target.value as "all" | PriceTrend)
+            }
+            className="w-40 rounded-lg border border-line bg-surface-2 px-2 py-1.5 text-sm outline-none focus:border-accent"
+          >
+            <option value="all">Any</option>
+            <option value="very-likely-rise">Very likely rise</option>
+            <option value="likely-rise">Likely rise</option>
+            <option value="stable">Stable</option>
+            <option value="likely-fall">Likely fall</option>
+            <option value="very-likely-fall">Very likely fall</option>
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[11px] tracking-wider text-ink-dim uppercase">
+            Next fixtures
+          </span>
+          <select
+            value={fixtureFilter}
+            onChange={(event) =>
+              setFixtureFilter(
+                event.target.value as "all" | "blank" | "double",
+              )
+            }
+            className="w-36 rounded-lg border border-line bg-surface-2 px-2 py-1.5 text-sm outline-none focus:border-accent"
+          >
+            <option value="all">Any</option>
+            <option value="blank">Blank next</option>
+            <option value="double">Double next</option>
+          </select>
+        </label>
+
         <label className="flex items-center gap-2 text-sm text-ink-muted">
           <input
             type="checkbox"
@@ -306,26 +401,47 @@ export function PlayersTable({
           Hide unavailable
         </label>
 
+        <label className="flex items-center gap-2 text-sm text-ink-muted">
+          <input
+            type="checkbox"
+            checked={excludeMyTeam}
+            onChange={(event) => setExcludeMyTeam(event.target.checked)}
+            className="size-4 accent-[color:var(--color-accent)]"
+            disabled={!myTeamIds.length}
+          />
+          Exclude my team
+        </label>
+
+        <label className="flex items-center gap-2 text-sm text-ink-muted">
+          <input
+            type="checkbox"
+            checked={watchlistOnly}
+            onChange={(event) => setWatchlistOnly(event.target.checked)}
+            className="size-4 accent-[color:var(--color-accent)]"
+          />
+          Watchlist only
+        </label>
+
         <div className="ml-auto text-sm text-ink-muted">
           {filtered.length} players
         </div>
       </div>
 
       <div className="mt-4 overflow-x-auto rounded-2xl border border-line bg-surface/80">
-        <table className="w-full min-w-[1100px] text-sm">
+        <table className="w-full min-w-[1100px] text-sm xl:min-w-0">
           <thead>
             <tr className="border-b border-line text-left">
-              <th className="px-4 py-3 text-[11px] font-semibold tracking-wider text-ink-dim uppercase">
+              <th className="px-3 py-3 text-[11px] font-semibold tracking-wider text-ink-dim uppercase xl:px-2">
                 Player
               </th>
-              <th className="px-2 py-3 text-[11px] font-semibold tracking-wider text-ink-dim uppercase">
+              <th className="px-1.5 py-3 text-[11px] font-semibold tracking-wider text-ink-dim uppercase">
                 Next fixtures
               </th>
               {COLUMNS.map((column) => (
                 <th
                   key={column.key}
                   title={column.title}
-                  className="px-2 py-3 text-right"
+                  className="px-1.5 py-3 text-right xl:px-1"
                 >
                   <button
                     type="button"
@@ -350,8 +466,9 @@ export function PlayersTable({
                 key={row.id}
                 className="border-b border-line/60 last:border-0 hover:bg-surface-2/50"
               >
-                <td className="px-4 py-2.5">
-                  <div className="flex items-center gap-2">
+                <td className="px-3 py-2.5 xl:px-2">
+                  <div className="flex items-center gap-1.5">
+                    <WatchlistStar playerId={row.id} />
                     <PositionBadge position={row.position} />
                     <Link
                       href={`/players/${row.id}`}
@@ -394,8 +511,8 @@ export function PlayersTable({
                     )}
                   </div>
                 </td>
-                <td className="px-2 py-2.5">
-                  <div className="flex shrink-0 items-start gap-1">
+                <td className="px-1.5 py-2.5">
+                  <div className="flex items-start gap-0.5 xl:gap-1">
                     {events.slice(0, 5).map((event) => {
                       const inEvent = row.fixtures.filter(
                         (fixture) => fixture.event === event,
@@ -435,7 +552,7 @@ export function PlayersTable({
                   <td
                     key={column.key}
                     className={cx(
-                      "px-2 py-2.5 text-right tabular-nums",
+                      "px-1.5 py-2.5 text-right tabular-nums whitespace-nowrap xl:px-1",
                       column.key === sortKey ? "text-accent" : "text-ink-muted",
                     )}
                   >

@@ -1,5 +1,6 @@
 import type {
   FplBootstrap,
+  FplClassicLeagueStandings,
   FplElementSummary,
   FplEntry,
   FplEntryHistory,
@@ -104,4 +105,15 @@ export function getEntryPicks(
 /** A manager's gameweek-by-gameweek record and the chips they have played. */
 export function getEntryHistory(entryId: number): Promise<FplEntryHistory> {
   return get<FplEntryHistory>(`/entry/${entryId}/history/`, 60);
+}
+
+/** Classic mini-league standings (public). */
+export function getClassicLeagueStandings(
+  leagueId: number,
+  page = 1,
+): Promise<FplClassicLeagueStandings> {
+  return get<FplClassicLeagueStandings>(
+    `/leagues-classic/${leagueId}/standings/?page_standings=${page}`,
+    120,
+  );
 }

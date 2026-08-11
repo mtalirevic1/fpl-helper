@@ -1,8 +1,19 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  useTransition,
+} from "react";
 
+import {
+  getBuilderHistory,
+  popBuilderHistory,
+  pushBuilderHistory,
+} from "@/lib/client-storage";
 import { money, percent } from "@/lib/format";
 import {
   CHIP_LABEL,
@@ -12,6 +23,21 @@ import {
 import { MODEL } from "@/lib/model/config";
 
 import { cx, PositionBadge } from "./ui";
+
+const HISTORY_EVENT = "fpl-edge-builder-history";
+
+function subscribeHistory(onStoreChange: () => void) {
+  window.addEventListener(HISTORY_EVENT, onStoreChange);
+  return () => window.removeEventListener(HISTORY_EVENT, onStoreChange);
+}
+
+function historySnapshot() {
+  return String(getBuilderHistory().length);
+}
+
+function notifyHistory() {
+  window.dispatchEvent(new Event(HISTORY_EVENT));
+}
 
 export interface PickerPlayer {
   id: number;
@@ -85,6 +111,15 @@ export function OptimizerControls({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
+  const historyLen = Number(
+    useSyncExternalStore(subscribeHistory, historySnapshot, () => "0"),
+  );
+
+  useEffect(() => {
+    // Seed history with the landing query so Undo has somewhere to return.
+    pushBuilderHistory(searchParams.toString());
+    notifyHistory();
+  }, [searchParams]);
 
   const [budget, setBudget] = useState(settings.budget);
   const [minStart, setMinStart] = useState(settings.minStart);
@@ -143,8 +178,23 @@ export function OptimizerControls({
     // Control changes drop a one-off Replace include so locks stay intentional.
     params.delete("include");
     params.delete("includeRole");
-    startTransition(() => router.push(`/optimizer?${params}`));
+    const query = params.toString();
+    pushBuilderHistory(searchParams.toString());
+    pushBuilderHistory(query);
+    notifyHistory();
+    startTransition(() => router.push(`/optimizer?${query}`));
   };
+
+  const undo = () => {
+    const previous = popBuilderHistory();
+    if (previous === null) return;
+    notifyHistory();
+    startTransition(() =>
+      router.push(previous ? `/optimizer?${previous}` : "/optimizer"),
+    );
+  };
+
+  const canUndo = historyLen >= 2;
 
   const activeChipHint =
     CHIP_OPTIONS.find((option) => option.value === settings.chip)?.hint ??
@@ -219,6 +269,19 @@ export function OptimizerControls({
 
   return (
     <div className="space-y-4 rounded-2xl border border-line bg-surface/80 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-ink-dim">
+          Settings sync to the URL so builds are shareable.
+        </p>
+        <button
+          type="button"
+          onClick={undo}
+          disabled={!canUndo || pending}
+          className="rounded-md border border-line px-2.5 py-1 text-xs text-ink-muted hover:text-ink disabled:opacity-40"
+        >
+          Undo
+        </button>
+      </div>
       <div className="grid gap-4 sm:grid-cols-3">
         <div>
           <label className="text-[11px] tracking-wider text-ink-dim uppercase">

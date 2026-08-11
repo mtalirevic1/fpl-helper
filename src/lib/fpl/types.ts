@@ -240,6 +240,22 @@ export interface FplElementSummary {
   history_past: FplHistoryPast[];
 }
 
+export interface FplEntryLeague {
+  id: number;
+  name: string;
+  short_name?: string | null;
+  created?: string;
+  closed?: boolean;
+  rank?: number | null;
+  entry_rank?: number | null;
+  entry_last_rank?: number | null;
+  entry_can_leave?: boolean;
+  entry_can_admin?: boolean;
+  entry_can_invite?: boolean;
+  start_event?: number;
+  admin_entry?: number | null;
+}
+
 export interface FplEntry {
   id: number;
   name: string;
@@ -253,6 +269,42 @@ export interface FplEntry {
   last_deadline_bank: number | null;
   last_deadline_value: number | null;
   last_deadline_total_transfers: number | null;
+  leagues?: {
+    classic?: FplEntryLeague[];
+    h2h?: FplEntryLeague[];
+  };
+}
+
+export interface FplClassicLeagueStanding {
+  id: number;
+  event_total: number;
+  player_name: string;
+  rank: number;
+  last_rank: number | null;
+  rank_sort: number;
+  total: number;
+  entry: number;
+  entry_name: string;
+}
+
+export interface FplClassicLeagueStandings {
+  league: {
+    id: number;
+    name: string;
+    created: string;
+    closed: boolean;
+    start_event: number;
+  };
+  standings: {
+    has_next: boolean;
+    page: number;
+    results: FplClassicLeagueStanding[];
+  };
+  new_entries?: {
+    has_next: boolean;
+    page: number;
+    results: unknown[];
+  };
 }
 
 export interface FplEntryPick {

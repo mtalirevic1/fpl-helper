@@ -175,17 +175,23 @@ export default async function PlayerPage({
         </Link>
       </PageHeader>
 
+      <div className="mb-3 flex flex-wrap gap-2">
+        {player.isPenaltyTaker && <Badge tone="accent">Pens</Badge>}
+        {player.isDirectFreeKickTaker && <Badge tone="info">Direct FK</Badge>}
+        {player.isCornerTaker && <Badge tone="info">Corners</Badge>}
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat
           label={`xP gameweek ${projections.horizon.from}`}
           value={points(player.xpNext)}
           tone="accent"
-          hint={`FPL's own estimate: ${player.officialEpNext.toFixed(1)}`}
+          hint={`Range ${points(player.xpNextLow)}–${points(player.xpNextHigh)} · FPL ${player.officialEpNext.toFixed(1)}`}
         />
         <Stat
           label={`xP GW${projections.horizon.from}–${projections.horizon.to}`}
           value={points(player.xpHorizon)}
-          hint={`${points(player.xpPerFixture)} per fixture`}
+          hint={`${points(player.xpHorizonLow)}–${points(player.xpHorizonHigh)} · ${points(player.xpPerFixture)} / fixture`}
         />
         <Stat
           label="Value"

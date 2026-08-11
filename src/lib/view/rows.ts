@@ -12,9 +12,14 @@ export interface PlayerRow {
   positionShort: string;
   price: number;
   xpNext: number;
+  xpNextLow: number;
+  xpNextHigh: number;
   xpHorizon: number;
   xpPerFixture: number;
   value: number;
+  isPenaltyTaker: boolean;
+  isDirectFreeKickTaker: boolean;
+  isCornerTaker: boolean;
   officialEpNext: number;
   form: number;
   pointsPerGame: number;
@@ -63,9 +68,14 @@ export function toPlayerRow(player: PlayerProjection): PlayerRow {
     positionShort: player.positionShort,
     price: player.price,
     xpNext: player.xpNext,
+    xpNextLow: player.xpNextLow,
+    xpNextHigh: player.xpNextHigh,
     xpHorizon: player.xpHorizon,
     xpPerFixture: player.xpPerFixture,
     value: player.value,
+    isPenaltyTaker: player.isPenaltyTaker,
+    isDirectFreeKickTaker: player.isDirectFreeKickTaker,
+    isCornerTaker: player.isCornerTaker,
     officialEpNext: player.officialEpNext,
     form: player.form,
     pointsPerGame: player.pointsPerGame,
