@@ -182,7 +182,9 @@ export function OptimizerControls({
     pushBuilderHistory(searchParams.toString());
     pushBuilderHistory(query);
     notifyHistory();
-    startTransition(() => router.push(`/optimizer?${query}`));
+    startTransition(() =>
+      router.push(`/optimizer?${query}`, { scroll: false }),
+    );
   };
 
   const undo = () => {
@@ -190,7 +192,9 @@ export function OptimizerControls({
     if (previous === null) return;
     notifyHistory();
     startTransition(() =>
-      router.push(previous ? `/optimizer?${previous}` : "/optimizer"),
+      router.push(previous ? `/optimizer?${previous}` : "/optimizer", {
+        scroll: false,
+      }),
     );
   };
 
@@ -609,7 +613,7 @@ export function BudgetAdapter({
     const params = new URLSearchParams(searchParams.toString());
     if (Number(params.get("budget")) === adapted) return;
     params.set("budget", String(adapted));
-    router.replace(`/optimizer?${params.toString()}`);
+    router.replace(`/optimizer?${params.toString()}`, { scroll: false });
   }, [adapted, requested, router, searchParams]);
 
   return null;

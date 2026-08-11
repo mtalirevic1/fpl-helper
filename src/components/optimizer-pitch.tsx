@@ -20,8 +20,8 @@ const POSITION_LABEL = {
 
 /**
  * Pitch for the squad builder. Locking pins a player to the XI or bench;
- * Replace picks a same-position stand-in, clears locks, and rebuilds within
- * the current budget when possible.
+ * Replace picks a same-position stand-in and rebuilds within the current
+ * budget when possible, keeping any other manual locks.
  */
 export function OptimizerPitch({
   startingXi,
@@ -91,7 +91,9 @@ export function OptimizerPitch({
     else if (!params.has("budget") && nextBudget !== SQUAD.budgetTenths) {
       params.set("budget", String(nextBudget));
     }
-    startTransition(() => router.push(`/optimizer?${params}`));
+    startTransition(() =>
+      router.push(`/optimizer?${params}`, { scroll: false }),
+    );
   };
 
   const toggleLock = (playerId: number, role: "xi" | "bench") => {
@@ -197,28 +199,37 @@ export function OptimizerPitch({
   ]);
 
   /**
-   * Rebuild around the chosen player without locking anyone or ruling the
-   * outgoing player out. Keep the current budget so the search trims elsewhere
-   * when it can; BudgetAdapter only raises it if the pick cannot fit.
+   * Rebuild around the chosen player. Keep every lock except the outgoing
+   * player's, force the pick in via include, and keep the current budget so the
+   * search trims elsewhere when it can.
    */
   const commitReplace = (incomingId: number) => {
     if (!replacing) return;
+    const outgoingId = replacing.player.id;
     const nextExcluded = excluded.filter((id) => id !== incomingId);
+    const nextLocked = locked.filter((id) => id !== outgoingId);
+    const nextStarters = lockedStarters.filter((id) => id !== outgoingId);
+    const nextBench = lockedBench.filter((id) => id !== outgoingId);
 
     const params = new URLSearchParams(searchParams.toString());
-    params.delete("lock");
-    params.delete("xi");
-    params.delete("bench");
+    if (nextLocked.length) params.set("lock", nextLocked.join(","));
+    else params.delete("lock");
+    if (nextStarters.length) params.set("xi", nextStarters.join(","));
+    else params.delete("xi");
+    if (nextBench.length) params.set("bench", nextBench.join(","));
+    else params.delete("bench");
     if (nextExcluded.length) params.set("ban", nextExcluded.join(","));
     else params.delete("ban");
-    // Quiet must-include so the pick sticks without Lock badges or role pins.
+    // Quiet must-include so the pick sticks without forcing a new Lock badge.
     params.set("include", String(incomingId));
     params.delete("includeRole");
     // Stay on the stated budget; the optimiser adapts only if this pick cannot fit.
     params.set("budget", String(budget));
 
     setReplacing(null);
-    startTransition(() => router.push(`/optimizer?${params}`));
+    startTransition(() =>
+      router.push(`/optimizer?${params}`, { scroll: false }),
+    );
   };
 
   return (
@@ -256,9 +267,9 @@ export function OptimizerPitch({
                 </span>
               </h3>
               <p className="mt-1 text-xs text-ink-dim">
-                Rebuilds the squad around this pick with no locks. The current
-                budget is kept when possible; it only rises if the player cannot
-                fit. Bank: {money(Math.max(0, bank))}.
+                Rebuilds the squad around this pick and keeps your other locks.
+                The current budget is kept when possible; it only rises if the
+                player cannot fit. Bank: {money(Math.max(0, bank))}.
               </p>
             </div>
             <button
