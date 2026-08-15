@@ -32,6 +32,7 @@ server-side and cached.
 | `npm run build`            | Production build                                                |
 | `npm start`                | Serve the production build                                      |
 | `npm run check`            | Sanity-checks the model and optimiser against live data         |
+| `npm run review:adjustments` | Diffs curated ease-in notes against live FPL flags            |
 | `npm run typecheck`        | TypeScript, no emit                                             |
 | `npm run lint`             | ESLint                                                          |
 | `npm run snapshot:baseline`| Refreshes the previous-season prior in `src/data/baseline.json`  |
@@ -127,7 +128,9 @@ as substitute appearances (a rested starter sits on the bench, not in the
 stands), and goalkeepers are penalised less because they rotate far less.
 Entries are matched to live FPL data by name, accent- and case-insensitively;
 anything unmatched or ambiguous is skipped and reported by `npm run check`,
-never guessed. Affected players show an "Eased in" badge in the tables and are
+never guessed. `npm run review:adjustments` also flags expired windows, players
+FPL already lists as out, and news that changed since `src/data/adjustments-review.json`
+(refresh that snapshot with `--write` after you have edited the list). Affected players show an "Eased in" badge in the tables and are
 listed under fitness concerns on **My team**. Edit the file as news breaks —
 no other change is needed.
 
@@ -209,9 +212,11 @@ src/
     view/              Slim row types for the client-side table
   data/baseline.json   Previous-season snapshot used as the model's prior
   data/manual-adjustments.ts   Hand-maintained World Cup / rotation intelligence
+  data/adjustments-review.json Last FPL news snapshot for those names
 scripts/
   snapshot-baseline.mjs  Regenerates the prior
   check-model.ts         Model and optimiser checks against live data
+  review-adjustments.ts  Diffs curated ease-in notes against live FPL flags
 ```
 
 Not affiliated with the Premier League. The FPL API is unofficial and undocumented;

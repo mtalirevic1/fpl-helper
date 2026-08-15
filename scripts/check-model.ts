@@ -20,6 +20,7 @@ import {
 import { MODEL } from "../src/lib/model/config";
 import { poissonTail } from "../src/lib/model/math";
 import { buildProjections } from "../src/lib/model/projections";
+import { reviewAdjustments } from "../src/lib/model/review-adjustments";
 import { buildCandidates } from "../src/lib/optimizer/candidates";
 import { recommendChips } from "../src/lib/optimizer/chips";
 import { optimizeSquad } from "../src/lib/optimizer/squad";
@@ -515,6 +516,113 @@ async function main() {
       1 - (1 - 0.45) * MODEL.keeperAdjustmentShare,
   );
 
+  const reviewBootstrap = {
+    teams: [{ id: 1, short_name: "LIV" }],
+    elements: [
+      {
+        id: 1,
+        team: 1,
+        element_type: 3,
+        web_name: "Mac Allister",
+        first_name: "Alexis",
+        second_name: "Mac Allister",
+        status: "a",
+        chance_of_playing_next_round: 100,
+        news: "",
+        news_added: null,
+      },
+      {
+        id: 2,
+        team: 1,
+        element_type: 2,
+        web_name: "Saliba",
+        first_name: "William",
+        second_name: "Saliba",
+        status: "i",
+        chance_of_playing_next_round: 0,
+        news: "Back injury",
+        news_added: "2026-08-01T00:00:00Z",
+      },
+    ],
+  } as unknown as FplBootstrap;
+  const hygiene = reviewAdjustments(
+    reviewBootstrap,
+    1,
+    {
+      generatedAt: "2026-08-01T00:00:00Z",
+      targetEvent: 1,
+      players: [
+        {
+          id: 2,
+          name: "Saliba",
+          status: "d",
+          chanceNext: 50,
+          news: "Knock",
+          newsAdded: null,
+        },
+      ],
+    },
+    [
+      {
+        player: "Mac Allister",
+        kind: "world-cup",
+        reason: "unlikely start",
+        windows: [{ fromEvent: 1, toEvent: 1, startFactor: 0.18 }],
+      },
+      {
+        player: "Saliba",
+        kind: "injury-doubt",
+        reason: "back",
+        windows: [{ fromEvent: 1, toEvent: 4, startFactor: 0.05 }],
+      },
+      {
+        player: "Digne",
+        kind: "world-cup",
+        reason: "gone",
+        windows: [{ fromEvent: 1, toEvent: 1, startFactor: 0.45 }],
+      },
+      {
+        player: "Spence",
+        kind: "world-cup",
+        reason: "old",
+        windows: [{ fromEvent: 1, toEvent: 2, startFactor: 0.45 }],
+      },
+    ],
+  );
+  check(
+    "review flags unmatched leavers",
+    hygiene.unmatched.includes("Digne"),
+  );
+  check(
+    "review flags a hard haircut on a fully available player",
+    hygiene.chanceConflict.some((row) => row.name === "Mac Allister"),
+  );
+  check(
+    "review flags FPL-already-out overlap",
+    hygiene.fplAlreadyOut.some((row) => row.name === "Saliba"),
+  );
+  check(
+    "review flags official news that moved since the snapshot",
+    hygiene.newsChanged.some((row) => row.name === "Saliba"),
+  );
+  const expiredReview = reviewAdjustments(
+    reviewBootstrap,
+    5,
+    null,
+    [
+      {
+        player: "Mac Allister",
+        kind: "world-cup",
+        reason: "stale",
+        windows: [{ fromEvent: 1, toEvent: 2, startFactor: 0.45 }],
+      },
+    ],
+  );
+  check(
+    "review flags windows that have already elapsed",
+    expiredReview.expired.some((row) => row.name === "Mac Allister"),
+  );
+
   const liveIndex = buildAdjustmentIndex(
     projections.bootstrap,
     MANUAL_ADJUSTMENTS,
@@ -558,6 +666,31 @@ async function main() {
         player.breakdownNext.startProbability <=
         player.rates.startProbability * player.startFactorNext + 1e-9,
     ),
+  );
+
+  const liveReview = reviewAdjustments(
+    projections.bootstrap,
+    season.targetEvent,
+  );
+  if (liveReview.expired.length) {
+    console.log(
+      `  expired windows: ${liveReview.expired.map((row) => row.name).join(", ")}`,
+    );
+  }
+  if (liveReview.fplAlreadyOut.length) {
+    console.log(
+      `  FPL already out (redundant haircut): ${liveReview.fplAlreadyOut.map((row) => row.name).join(", ")}`,
+    );
+  }
+  if (liveReview.chanceConflict.length) {
+    console.log(
+      `  hard haircut vs FPL available: ${liveReview.chanceConflict.map((row) => row.name).join(", ")}`,
+    );
+  }
+  check(
+    "curated names are unambiguous and still in the game",
+    liveReview.unmatched.length === 0 && liveReview.ambiguous.length === 0,
+    `unmatched ${liveReview.unmatched.join(", ") || "none"}; ambiguous ${liveReview.ambiguous.join(", ") || "none"}`,
   );
 
   const lastDeadlineMs =

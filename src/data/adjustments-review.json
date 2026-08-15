@@ -1,0 +1,334 @@
+{
+  "generatedAt": "2026-08-15T18:13:54.281Z",
+  "targetEvent": 1,
+  "players": [
+    {
+      "id": 1,
+      "name": "Raya",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 5,
+      "name": "J.Timber",
+      "status": "i",
+      "chanceNext": 0,
+      "news": "Groin injury - Unknown return date",
+      "newsAdded": "2026-07-23T12:01:23.272929Z"
+    },
+    {
+      "id": 6,
+      "name": "Saliba",
+      "status": "i",
+      "chanceNext": 0,
+      "news": "Back injury - Unknown return date",
+      "newsAdded": "2026-07-23T12:01:23.289376Z"
+    },
+    {
+      "id": 12,
+      "name": "Saka",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 13,
+      "name": "Rice",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 14,
+      "name": "Eze",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 16,
+      "name": "Madueke",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 17,
+      "name": "Merino",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 19,
+      "name": "Zubimendi",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 28,
+      "name": "Martinez",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 31,
+      "name": "Konsa",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 40,
+      "name": "Rogers",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 55,
+      "name": "Watkins",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 101,
+      "name": "Henderson",
+      "status": "d",
+      "chanceNext": 75,
+      "news": "Wrist injury - 75% chance of playing",
+      "newsAdded": "2026-08-09T09:30:07.136250Z"
+    },
+    {
+      "id": 142,
+      "name": "James",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 143,
+      "name": "Chalobah",
+      "status": "u",
+      "chanceNext": 0,
+      "news": "Has joined Como permanently",
+      "newsAdded": "2026-08-10T14:03:50.769483Z"
+    },
+    {
+      "id": 144,
+      "name": "Gusto",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 149,
+      "name": "Colwill",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 155,
+      "name": "Enzo",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 198,
+      "name": "Henderson",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 200,
+      "name": "Lacroix",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 211,
+      "name": "Yeremy",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 223,
+      "name": "Mateta",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 372,
+      "name": "Mac Allister",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 377,
+      "name": "Munoz",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 385,
+      "name": "Trafford",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 387,
+      "name": "O'Reilly",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 388,
+      "name": "Guéhi",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 399,
+      "name": "Cherki",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 402,
+      "name": "Rodrigo",
+      "status": "i",
+      "chanceNext": 0,
+      "news": "Back injury - Unknown return date",
+      "newsAdded": "2026-07-23T12:01:23.675537Z"
+    },
+    {
+      "id": 411,
+      "name": "Haaland",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 419,
+      "name": "Martinez",
+      "status": "d",
+      "chanceNext": 75,
+      "news": "Thigh injury - 75% chance of playing",
+      "newsAdded": "2026-07-24T20:00:10.337107Z"
+    },
+    {
+      "id": 429,
+      "name": "Rashford",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 432,
+      "name": "Mainoo",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 439,
+      "name": "Šeško",
+      "status": "d",
+      "chanceNext": 75,
+      "news": "Shin injury - 75% chance of playing",
+      "newsAdded": "2026-07-23T12:01:23.722029Z"
+    },
+    {
+      "id": 481,
+      "name": "Anderson",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 498,
+      "name": "Senesi",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 499,
+      "name": "Pedro Porro",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 500,
+      "name": "Romero",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 503,
+      "name": "Van de Ven",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 505,
+      "name": "Spence",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    }
+  ]
+}

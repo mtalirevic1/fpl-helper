@@ -9,6 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "check": "tsx scripts/check-model.ts",
+    "review:adjustments": "tsx scripts/review-adjustments.ts",
     "snapshot:baseline": "tsx scripts/snapshot-baseline.mjs",
     "snapshot:gw": "tsx scripts/snapshot-gw.ts"
   },

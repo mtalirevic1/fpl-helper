@@ -11,6 +11,12 @@ export interface ChangelogEntry {
 
 export const MODEL_CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-08-15",
+    title: "World Cup / injury windows updated for GW1 week",
+    detail:
+      "Split returnees who already have minutes from those still managed; Mac Allister and Munoz no longer treated as fully ruled out; Saliba, Rodri, Timber, Sesko, van de Ven and Colwill added as injury notes; Digne removed after the PSG move.",
+  },
+  {
     date: "2026-08-11",
     title: "Set-piece uplifts and confidence bands",
     detail:
