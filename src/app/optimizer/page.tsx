@@ -99,7 +99,11 @@ export default async function OptimizerPage({
   // wrong thing. Force the single-week view regardless of the URL horizon.
   const horizon = chip === "freehit" ? 1 : requestedHorizon;
   const budget = Math.max(600, Number(params.budget) || SQUAD.budgetTenths);
-  const minStart = Math.min(0.9, Math.max(0, Number(params.minStart) || 0.25));
+  const parsedMinStart = Number(params.minStart);
+  const minStart = Math.min(
+    0.9,
+    Math.max(0, Number.isFinite(parsedMinStart) ? parsedMinStart : 0.25),
+  );
   const priorScale = Number(params.prior);
   const formationParam = params.formation?.trim() || "auto";
   const formation =
@@ -129,6 +133,7 @@ export default async function OptimizerPage({
   ]);
   const candidates = buildCandidates(projections.players, {
     minStartProbability: minStart,
+    mustInclude: searchLocked,
   });
 
   const solution = optimizeSquad(candidates, {
@@ -186,8 +191,6 @@ export default async function OptimizerPage({
     xpHorizon: player.xpHorizon,
   }));
 
-  const controlPlayers = pickerPlayers.slice(0, 400);
-
   const spendByPosition = ([1, 2, 3, 4] as PositionId[]).map((position) => {
     const inPosition = solution.squad.filter(
       (player) => player.position === position,
@@ -222,7 +225,7 @@ export default async function OptimizerPage({
       <BudgetAdapter requested={budget} adapted={effectiveBudget} />
 
       <OptimizerControls
-        players={controlPlayers}
+        players={pickerPlayers}
         settings={{
           horizon,
           budget: effectiveBudget,

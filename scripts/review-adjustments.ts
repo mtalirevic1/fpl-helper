@@ -1,8 +1,9 @@
 /**
  * Reviews hand-maintained start-probability adjustments against live FPL flags.
  *
- * Prints unmatched names, expired windows, players FPL already lists as out,
- * and news that changed since the last snapshot. Never writes start factors.
+ * Prints unmatched names, expired windows, players who have left the league,
+ * players FPL already lists as out, and news that changed since the last
+ * snapshot. Never writes start factors.
  *
  * Usage:
  *   npm run review:adjustments

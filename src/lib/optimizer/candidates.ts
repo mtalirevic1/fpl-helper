@@ -6,6 +6,12 @@ export interface CandidateOptions {
   minStartProbability?: number;
   /** Drop injured, suspended and unavailable players. */
   requireAvailable?: boolean;
+  /**
+   * Always keep these players, even when they fail the start-chance or
+   * availability filters. Used for explicit locks and replaces so a backup
+   * keeper (or similar) can still be forced into the 15.
+   */
+  mustInclude?: number[];
 }
 
 export function toOptimizerPlayer(player: PlayerProjection): OptimizerPlayer {
@@ -31,9 +37,11 @@ export function buildCandidates(
 ): OptimizerPlayer[] {
   const minStart = options.minStartProbability ?? 0;
   const requireAvailable = options.requireAvailable ?? true;
+  const mustInclude = new Set(options.mustInclude ?? []);
 
   return players
     .filter((player) => {
+      if (mustInclude.has(player.id)) return true;
       if (requireAvailable && player.availability <= 0) return false;
       if (player.rates.startProbability < minStart) return false;
       return true;

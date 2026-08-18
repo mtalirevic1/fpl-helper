@@ -43,6 +43,8 @@ export interface AdjustmentReview {
   expired: AdjustmentReviewRow[];
   /** FPL already flags them out — the curated haircut is redundant. */
   fplAlreadyOut: AdjustmentReviewRow[];
+  /** Status `u` with a "joined …" note — delete the curated entry. */
+  leftTheLeague: AdjustmentReviewRow[];
   /** We haircut them hard while FPL still says they are likely to play. */
   chanceConflict: AdjustmentReviewRow[];
   /** Official news/status changed since the last committed snapshot. */
@@ -51,6 +53,10 @@ export interface AdjustmentReview {
 }
 
 const OUT_STATUSES = new Set(["i", "s", "u", "n"]);
+
+function hasLeftTheLeague(element: FplElement): boolean {
+  return element.status === "u" && /\bjoined\b/i.test(element.news);
+}
 
 function chanceNextOf(element: FplElement): number | null {
   return element.chance_of_playing_next_round;
@@ -100,6 +106,7 @@ export function reviewAdjustments(
 
   const expired: AdjustmentReviewRow[] = [];
   const fplAlreadyOut: AdjustmentReviewRow[] = [];
+  const leftTheLeagueRows: AdjustmentReviewRow[] = [];
   const chanceConflict: AdjustmentReviewRow[] = [];
   const newsChanged: AdjustmentReviewRow[] = [];
   const active: AdjustmentReviewRow[] = [];
@@ -138,7 +145,18 @@ export function reviewAdjustments(
         continue;
       }
 
-      if (flaggedOut) {
+      if (hasLeftTheLeague(element)) {
+        leftTheLeagueRows.push(
+          rowFor(
+            element,
+            teamShort,
+            adjustment,
+            targetEvent,
+            isGoalkeeper,
+            element.news || `FPL status ${element.status} — delete the entry`,
+          ),
+        );
+      } else if (flaggedOut) {
         fplAlreadyOut.push(
           rowFor(
             element,
@@ -203,6 +221,7 @@ export function reviewAdjustments(
     ambiguous: index.ambiguous,
     expired,
     fplAlreadyOut,
+    leftTheLeague: leftTheLeagueRows,
     chanceConflict,
     newsChanged,
     active,
@@ -260,6 +279,7 @@ export function formatAdjustmentReview(review: AdjustmentReview): string {
     lines.push(`Ambiguous — add a team code: ${review.ambiguous.join(", ")}`);
   }
   section("Expired windows", review.expired);
+  section("Left the league — delete the entry", review.leftTheLeague);
   section("FPL already marks them out (haircut is redundant)", review.fplAlreadyOut);
   section("Hard haircut vs FPL still available", review.chanceConflict);
   section("News/status changed since snapshot", review.newsChanged);

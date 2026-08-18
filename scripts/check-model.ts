@@ -187,6 +187,43 @@ async function main() {
     money(constrained.cost),
   );
 
+  console.log("\nLocking a player the start-chance floor would drop...");
+  const backupGk = players.find(
+    (player) =>
+      player.position === 1 &&
+      player.rates.startProbability < 0.25 &&
+      player.availability > 0,
+  );
+  if (backupGk) {
+    const filtered = buildCandidates(players, { minStartProbability: 0.25 });
+    check(
+      "the default start-chance floor drops backup keepers from the pool",
+      !filtered.some((player) => player.id === backupGk.id),
+      backupGk.name,
+    );
+    const forced = buildCandidates(players, {
+      minStartProbability: 0.25,
+      mustInclude: [backupGk.id],
+    });
+    const lockedBackup = optimizeSquad(forced, {
+      locked: [backupGk.id],
+      lockedBench: [backupGk.id],
+    });
+    console.log(
+      `  locked ${backupGk.name} (start ${backupGk.rates.startProbability.toFixed(2)}) on the bench → ${lockedBackup.squad.some((player) => player.id === backupGk.id) ? "kept" : "dropped"}`,
+    );
+    check(
+      "an explicit lock keeps a player the start-chance floor would drop",
+      lockedBackup.squad.some((player) => player.id === backupGk.id),
+    );
+    check(
+      "a locked backup keeper sits on the bench when pinned there",
+      lockedBackup.bench.some((player) => player.id === backupGk.id),
+    );
+  } else {
+    console.log("  SKIP  no available backup keeper below the 0.25 floor");
+  }
+
   console.log("\nXI and bench role locks...");
   const starterLock = players.find(
     (player) => player.position === 3 && player.rates.startProbability >= 0.6,
@@ -543,6 +580,18 @@ async function main() {
         news: "Back injury",
         news_added: "2026-08-01T00:00:00Z",
       },
+      {
+        id: 3,
+        team: 1,
+        element_type: 2,
+        web_name: "Romero",
+        first_name: "Cristian",
+        second_name: "Romero",
+        status: "u",
+        chance_of_playing_next_round: 0,
+        news: "Has joined Atletico Madrid permanently",
+        news_added: "2026-08-16T00:00:00Z",
+      },
     ],
   } as unknown as FplBootstrap;
   const hygiene = reviewAdjustments(
@@ -587,6 +636,12 @@ async function main() {
         reason: "old",
         windows: [{ fromEvent: 1, toEvent: 2, startFactor: 0.45 }],
       },
+      {
+        player: "Romero",
+        kind: "world-cup",
+        reason: "gone",
+        windows: [{ fromEvent: 1, toEvent: 1, startFactor: 0.45 }],
+      },
     ],
   );
   check(
@@ -600,6 +655,11 @@ async function main() {
   check(
     "review flags FPL-already-out overlap",
     hygiene.fplAlreadyOut.some((row) => row.name === "Saliba"),
+  );
+  check(
+    "review flags leavers separately from injured/unavailable",
+    hygiene.leftTheLeague.some((row) => row.name === "Romero") &&
+      !hygiene.fplAlreadyOut.some((row) => row.name === "Romero"),
   );
   check(
     "review flags official news that moved since the snapshot",
@@ -675,6 +735,11 @@ async function main() {
   if (liveReview.expired.length) {
     console.log(
       `  expired windows: ${liveReview.expired.map((row) => row.name).join(", ")}`,
+    );
+  }
+  if (liveReview.leftTheLeague.length) {
+    console.log(
+      `  left the league (delete the entry): ${liveReview.leftTheLeague.map((row) => row.name).join(", ")}`,
     );
   }
   if (liveReview.fplAlreadyOut.length) {

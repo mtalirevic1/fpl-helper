@@ -11,6 +11,12 @@ export interface ChangelogEntry {
 
 export const MODEL_CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-08-18",
+    title: "Community Shield minutes and GW1 knocks",
+    detail:
+      "Split Shield starters (Haaland, Anderson, O'Reilly, Madueke) from unused returnees; Rice, Saka, Guéhi and Cherki moved onto the minutes tier; Doku, Bruno G. and Garnacho added as unflagged knocks; Watkins GW1 raised after Abraham's doubt; Chalobah, Romero and Raya removed.",
+  },
+  {
     date: "2026-08-15",
     title: "World Cup / injury windows updated for GW1 week",
     detail:

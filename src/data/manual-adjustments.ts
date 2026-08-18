@@ -10,15 +10,17 @@ import type { ManualAdjustment } from "@/lib/model/adjustments";
  * unique. Entries that match nothing or several players are skipped and
  * reported by `npm run check` and `npm run review:adjustments` — they never
  * silently adjust the wrong player. The review command also flags expired
- * windows, FPL-already-out overlap, and news that moved since the last snapshot
- * (`src/data/adjustments-review.json`). It does not rewrite start factors.
+ * windows, FPL-already-out overlap, players who have left the league, and news
+ * that moved since the last snapshot (`src/data/adjustments-review.json`). It
+ * does not rewrite start factors.
  *
- * Current contents (reviewed 15 Aug 2026, six days before the GW1 deadline):
- * the 2026 World Cup ran to 19 July. Final-weekend players only rejoined clubs
- * around 9–12 August. Some now have a first friendly or Community Shield
- * minutes; others are still being managed, and a few have been ruled unlikely
- * to start opening weekend. Separate injury notes sit below the World Cup
- * windows so they do not get mixed with "eased in" flags.
+ * Current contents (reviewed 18 Aug 2026, three days before the GW1 deadline):
+ * the 2026 World Cup ran to 19 July. The Community Shield (Arsenal 3–0 City,
+ * 16 Aug) is the first competitive minutes for several returnees — starters
+ * and subs are split from those still unused. Separate injury notes sit below
+ * the World Cup windows so they do not get mixed with "eased in" flags.
+ * Chalobah (Como) and Romero (Atlético Madrid) have left the league and are
+ * no longer listed.
  */
 
 /** Played deep into the World Cup and still short of minutes. */
@@ -46,6 +48,19 @@ const worldCupMinutes = (player: string, team?: string): ManualAdjustment => ({
     { fromEvent: 1, toEvent: 1, startFactor: 0.7 },
     { fromEvent: 2, toEvent: 2, startFactor: 0.85 },
     { fromEvent: 3, toEvent: 4, startFactor: 0.95 },
+  ],
+});
+
+/** Started the Community Shield; GW1 start is likely, full 90 still not assumed. */
+const worldCupStarted = (player: string, team?: string): ManualAdjustment => ({
+  player,
+  team,
+  kind: "world-cup",
+  reason:
+    "World Cup returnee who started the Community Shield — likely to start GW1, minutes still managed",
+  windows: [
+    { fromEvent: 1, toEvent: 1, startFactor: 0.85 },
+    { fromEvent: 2, toEvent: 2, startFactor: 0.95 },
   ],
 });
 
@@ -84,17 +99,16 @@ const worldCupExtraRest = (player: string, team?: string): ManualAdjustment => (
 });
 
 export const MANUAL_ADJUSTMENTS: ManualAdjustment[] = [
-  // Arsenal — Arteta (15 Aug): Rice, Saka, Zubimendi available for the
-  // Community Shield after training this week, but they had no pre-season
-  // minutes so they are expected from the bench. Eze, Madueke and Raya got
-  // a first run against Como.
-  worldCup("Rice"),
-  worldCup("Saka"),
+  // Arsenal — Community Shield (16 Aug): Madueke and Raya started; Rice 45',
+  // Saka ~30', Eze from the bench; Zubimendi and Merino unused. Raya played
+  // 90 and is treated as fully back. Bruno G. started then came off at HT
+  // with an icepack on his thigh.
+  worldCupStarted("Madueke"),
+  worldCupMinutes("Rice"),
+  worldCupMinutes("Saka"),
+  worldCupMinutes("Eze"),
   worldCup("Zubimendi"),
   worldCup("Merino"),
-  worldCupMinutes("Eze"),
-  worldCupMinutes("Madueke"),
-  worldCupMinutes("Raya"),
   {
     player: "Saliba",
     kind: "injury-doubt",
@@ -115,12 +129,40 @@ export const MANUAL_ADJUSTMENTS: ManualAdjustment[] = [
       { fromEvent: 3, toEvent: 4, startFactor: 0.4 },
     ],
   },
+  {
+    player: "Bruno G.",
+    kind: "injury-doubt",
+    reason:
+      "Withdrawn at half-time in the Community Shield with an icepack on his thigh; FPL still lists him available",
+    windows: [{ fromEvent: 1, toEvent: 1, startFactor: 0.7 }],
+  },
 
   // Aston Villa — Emery gave Watkins, Konsa and Emi Martínez four weeks, so
-  // they missed the Super Cup on 12 Aug. Digne has left for PSG.
+  // they missed the Super Cup on 12 Aug. Abraham's knock (FPL d/75%) makes a
+  // Watkins GW1 start more likely despite zero pre-season minutes.
   worldCupExtraRest("Konsa"),
-  worldCupExtraRest("Watkins"),
   worldCupExtraRest("Emiliano Martínez"),
+  {
+    player: "Watkins",
+    kind: "world-cup",
+    reason:
+      "Four weeks off after the World Cup and missed the Super Cup, but Abraham's knock pushes him toward a GW1 start",
+    windows: [
+      { fromEvent: 1, toEvent: 1, startFactor: 0.5 },
+      { fromEvent: 2, toEvent: 2, startFactor: 0.65 },
+      { fromEvent: 3, toEvent: 4, startFactor: 0.85 },
+    ],
+  },
+  {
+    player: "Garnacho",
+    kind: "injury-doubt",
+    reason:
+      "Sustained a concussion in pre-season; FPL still lists him available",
+    windows: [
+      { fromEvent: 1, toEvent: 1, startFactor: 0.5 },
+      { fromEvent: 2, toEvent: 2, startFactor: 0.8 },
+    ],
+  },
 
   // Liverpool — Echo / Iraola (14 Aug): both back in training, Munoz played
   // 30 minutes vs Monaco, neither expected to start at Newcastle. Not a
@@ -129,8 +171,8 @@ export const MANUAL_ADJUSTMENTS: ManualAdjustment[] = [
   worldCupUnlikelyStart("Victor Munoz"),
 
   // Chelsea — Alonso: Rogers "will be ready" for the season start but skipped
-  // the tour. Lacroix signed from Palace and is back in training.
-  worldCup("Chalobah"),
+  // the tour. Lacroix signed from Palace and is back in training. Chalobah
+  // has joined Como permanently.
   worldCup("Reece James"),
   worldCup("Morgan Rogers"),
   worldCup("Gusto"),
@@ -149,12 +191,11 @@ export const MANUAL_ADJUSTMENTS: ManualAdjustment[] = [
   worldCup("Mateta"),
   worldCup("Yeremy", "CRY"), // Yeremy Pino — FPL lists him by first name
 
-  // Tottenham — Porro, Romero and Spence only reported this week. Senesi was
-  // in earlier for testing and has been used in predicted XIs. Van de Ven
-  // has not played a pre-season minute.
+  // Tottenham — Porro and Spence only reported this week. Senesi was in
+  // earlier for testing and has been used in predicted XIs. Van de Ven has
+  // not played a pre-season minute. Romero has joined Atlético Madrid.
   worldCup("Spence"),
   worldCup("Pedro Porro"),
-  worldCup("Cristian Romero"),
   worldCupMinutes("Senesi"),
   {
     player: "van de Ven",
@@ -168,14 +209,16 @@ export const MANUAL_ADJUSTMENTS: ManualAdjustment[] = [
     ],
   },
 
-  // Manchester City — Guehi, Anderson, O'Reilly, Cherki and Haaland trained
-  // this week for the Community Shield; Rodri is in rehab after back surgery.
+  // Manchester City — Community Shield: Haaland, Anderson and O'Reilly
+  // started; Guéhi and Cherki from the bench; Trafford unused (Donnarumma
+  // started). Doku started then picked up a calf knock. Rodri is in rehab
+  // after back surgery.
   worldCup("Trafford"),
-  worldCup("Guéhi"),
-  worldCup("O'Reilly"),
-  worldCup("Elliot Anderson"),
-  worldCup("Cherki"),
-  worldCup("Haaland"),
+  worldCupMinutes("Guéhi"),
+  worldCupStarted("O'Reilly"),
+  worldCupStarted("Elliot Anderson"),
+  worldCupMinutes("Cherki"),
+  worldCupStarted("Haaland"),
   {
     player: "Rodrigo",
     team: "MCI",
@@ -186,6 +229,13 @@ export const MANUAL_ADJUSTMENTS: ManualAdjustment[] = [
       { fromEvent: 1, toEvent: 2, startFactor: 0.05 },
       { fromEvent: 3, toEvent: 4, startFactor: 0.35 },
     ],
+  },
+  {
+    player: "Doku",
+    kind: "injury-doubt",
+    reason:
+      "Calf discomfort after a Community Shield knock; FPL still lists him available",
+    windows: [{ fromEvent: 1, toEvent: 1, startFactor: 0.6 }],
   },
 
   // Manchester United

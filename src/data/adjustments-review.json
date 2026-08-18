@@ -1,15 +1,7 @@
 {
-  "generatedAt": "2026-08-15T18:13:54.281Z",
+  "generatedAt": "2026-08-18T10:50:46.310Z",
   "targetEvent": 1,
   "players": [
-    {
-      "id": 1,
-      "name": "Raya",
-      "status": "a",
-      "chanceNext": null,
-      "news": "",
-      "newsAdded": null
-    },
     {
       "id": 5,
       "name": "J.Timber",
@@ -123,14 +115,6 @@
       "newsAdded": null
     },
     {
-      "id": 143,
-      "name": "Chalobah",
-      "status": "u",
-      "chanceNext": 0,
-      "news": "Has joined Como permanently",
-      "newsAdded": "2026-08-10T14:03:50.769483Z"
-    },
-    {
       "id": 144,
       "name": "Gusto",
       "status": "a",
@@ -149,6 +133,14 @@
     {
       "id": 155,
       "name": "Enzo",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
+      "id": 160,
+      "name": "Garnacho",
       "status": "a",
       "chanceNext": null,
       "news": "",
@@ -235,6 +227,14 @@
       "newsAdded": null
     },
     {
+      "id": 400,
+      "name": "Doku",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
       "id": 402,
       "name": "Rodrigo",
       "status": "i",
@@ -253,9 +253,9 @@
     {
       "id": 419,
       "name": "Martinez",
-      "status": "d",
-      "chanceNext": 75,
-      "news": "Thigh injury - 75% chance of playing",
+      "status": "a",
+      "chanceNext": 100,
+      "news": "",
       "newsAdded": "2026-07-24T20:00:10.337107Z"
     },
     {
@@ -283,6 +283,14 @@
       "newsAdded": "2026-07-23T12:01:23.722029Z"
     },
     {
+      "id": 452,
+      "name": "Bruno G.",
+      "status": "a",
+      "chanceNext": null,
+      "news": "",
+      "newsAdded": null
+    },
+    {
       "id": 481,
       "name": "Anderson",
       "status": "a",
@@ -301,14 +309,6 @@
     {
       "id": 499,
       "name": "Pedro Porro",
-      "status": "a",
-      "chanceNext": null,
-      "news": "",
-      "newsAdded": null
-    },
-    {
-      "id": 500,
-      "name": "Romero",
       "status": "a",
       "chanceNext": null,
       "news": "",

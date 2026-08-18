@@ -129,7 +129,7 @@ stands), and goalkeepers are penalised less because they rotate far less.
 Entries are matched to live FPL data by name, accent- and case-insensitively;
 anything unmatched or ambiguous is skipped and reported by `npm run check`,
 never guessed. `npm run review:adjustments` also flags expired windows, players
-FPL already lists as out, and news that changed since `src/data/adjustments-review.json`
+who have left the league, players FPL already lists as out, and news that changed since `src/data/adjustments-review.json`
 (refresh that snapshot with `--write` after you have edited the list). Affected players show an "Eased in" badge in the tables and are
 listed under fitness concerns on **My team**. Edit the file as news breaks —
 no other change is needed.
